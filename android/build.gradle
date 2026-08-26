@@ -1,0 +1,22 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.googlemobileads'
+version = '0.1.0'
+
+android {
+  namespace "expo.modules.googlemobileads"
+  defaultConfig {
+    versionCode 1
+    versionName "0.1.0"
+  }
+  lintOptions {
+    abortOnError false
+  }
+}
+
+dependencies {
+  implementation "com.google.android.libraries.ads.mobile.sdk:ads-mobile-sdk:1.4.0"
+}
