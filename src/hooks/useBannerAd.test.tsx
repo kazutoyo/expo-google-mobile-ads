@@ -1,6 +1,6 @@
 import { renderHook } from '@testing-library/react-native';
 
-import { useBannerAd } from './useBannerAd';
+import { useBannerAd, useBannerAdState } from './useBannerAd';
 
 const mockUseEvent = jest.fn();
 const mockUseReleasingSharedObject = jest.fn();
@@ -26,11 +26,11 @@ beforeEach(() => {
   mockUseEvent.mockReturnValue({ status: 'loading' });
 });
 
-describe('useBannerAd(ad)', () => {
+describe('useBannerAdState', () => {
   it('渡された ad の statusChange を購読する', async () => {
     const ad = makeAd({ status: 'loading' });
 
-    await renderHook(() => useBannerAd(ad));
+    await renderHook(() => useBannerAdState(ad));
 
     expect(mockUseEvent).toHaveBeenCalledWith(ad, 'statusChange', {
       status: 'loading',
@@ -42,7 +42,7 @@ describe('useBannerAd(ad)', () => {
     mockUseEvent.mockReturnValue({ status: 'loaded' });
     const ad = makeAd({ loadedSize: size });
 
-    const { result } = await renderHook(() => useBannerAd(ad));
+    const { result } = await renderHook(() => useBannerAdState(ad));
 
     expect(result.current.isLoaded).toBe(true);
     expect(result.current.loadedSize).toEqual(size);
@@ -52,20 +52,20 @@ describe('useBannerAd(ad)', () => {
     const error = { code: 3, message: 'No fill', domain: 'com.google.admob' };
     mockUseEvent.mockReturnValue({ status: 'error', error });
 
-    const { result } = await renderHook(() => useBannerAd(makeAd()));
+    const { result } = await renderHook(() => useBannerAdState(makeAd()));
 
     expect(result.current.isLoaded).toBe(false);
     expect(result.current.error).toBe(error);
   });
 
   it('ad を渡した場合は ad を生成しない', async () => {
-    await renderHook(() => useBannerAd(makeAd()));
+    await renderHook(() => useBannerAdState(makeAd()));
 
     expect(mockUseReleasingSharedObject).not.toHaveBeenCalled();
   });
 });
 
-describe('useBannerAd(options)', () => {
+describe('useBannerAd', () => {
   it('useReleasingSharedObject で ad を生成し返す', async () => {
     const ad = makeAd();
     mockUseReleasingSharedObject.mockReturnValue(ad);
