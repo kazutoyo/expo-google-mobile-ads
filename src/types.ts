@@ -3,7 +3,8 @@ export type BannerAdStatus = 'loading' | 'loaded' | 'error';
 export type AdapterResponse = {
   adapterClassName: string;
   latencyMillis: number;
-  description: string;
+  // description は意図的に含めていない: ネイティブ側（GADAdNetworkResponseInfo）に
+  // 公開された description プロパティが存在せず、送られてこないため。
   adError?: { code: number; message: string; domain: string };
 };
 
