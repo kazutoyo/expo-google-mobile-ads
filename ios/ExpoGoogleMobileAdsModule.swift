@@ -101,12 +101,15 @@ public final class ExpoGoogleMobileAdsModule: Module {
 
       Property("size") { (ad: BannerAd) in ad.requestedSize }
       // status/error/loadedSize/responseInfo は BannerViewDelegate のコールバック（メイン
-      // スレッド）から書き込まれる。Swift の Dictionary はスレッドセーフではないため、JS 側
-      // からの読み取りも runOnMain でメインスレッドへ同期し、書き込みと直列化する。
-      Property("status") { (ad: BannerAd) in runOnMain { ad.status } }
-      Property("error") { (ad: BannerAd) in runOnMain { ad.error } }
-      Property("loadedSize") { (ad: BannerAd) in runOnMain { ad.loadedSize } }
-      Property("responseInfo") { (ad: BannerAd) in runOnMain { ad.responseInfo } }
+      // スレッド）から書き込まれ、React の render のたびに JS 側から読み取られる（ホット
+      // パス）。以前はここも runOnMain（＝main.sync）でメインスレッドへ同期させていたが、
+      // main が JS ランタイムへ同期的に割り込む経路と衝突しうる上に、頻繁に呼ばれる箇所を
+      // メインスレッドの詰まり具合に晒すことになるため、BannerAd 内部の NSLock に置き換えた
+      // （詳細は BannerAd.swift 側のコメントを参照）。ここではもう main には触れていない。
+      Property("status") { (ad: BannerAd) in ad.status }
+      Property("error") { (ad: BannerAd) in ad.error }
+      Property("loadedSize") { (ad: BannerAd) in ad.loadedSize }
+      Property("responseInfo") { (ad: BannerAd) in ad.responseInfo }
 
       Function("load") { (ad: BannerAd) in ad.load() }
 

@@ -10,36 +10,40 @@ final class BannerAdView: ExpoView {
     // 同じ ad が再び props で渡ってきても（`ad.bannerView.superview` が自分ではなくなっている
     // ため）二度と取り戻せず、この View が永久に空白のままになってしまう
     // （実際に自分がまだ画面に出しているときだけ早期リターンする）。
-    if currentAd === ad, ad?.bannerView.superview === self {
+    if currentAd === ad, ad?.bannerView?.superview === self {
       return
     }
     detachCurrentAdIfOwned()
     currentAd = ad
 
-    guard let ad else { return }
+    // `ad.bannerView` は release() 済みなら nil を返す。その場合は表示するものが無いので、
+    // 空のバナーを作り直してマウントしたりはしない（release 後にこの ad をまだ保持している
+    // View が再度 props を受け取ってしまうケースへの対処）。
+    guard let ad, let bannerView = ad.bannerView else { return }
+
     // 別の View がまだこの広告の所有者として記録されていて、かつ実際に画面（window）に
     // 乗っているときだけ警告する。`deinit` のタイミングは不定なので、単なる再マウント
     // （古い View インスタンスがまだ解放されていないだけ）では所有権 or window のどちらかが
     // 外れており、警告は鳴らない。両方 true のときだけが本当の「同時使用」。
-    if let otherOwner = ad.currentAttachment, otherOwner !== self, ad.bannerView.window != nil {
+    if let otherOwner = ad.currentAttachment, otherOwner !== self, bannerView.window != nil {
       log.warn(
         "同じ広告が複数の BannerAdView に渡されています。最後にマウントされた View にのみ表示されます。"
       )
     }
-    ad.bannerView.removeFromSuperview()
+    bannerView.removeFromSuperview()
     // このバージョンの ExpoView (ExpoFabricView) には `reactViewController()` が無いため、
     // `appContext.utilities.currentViewController()` で表示中の view controller を取得する。
     // （`load()` 時にも都度解決し直しているので、ここでの設定はマウント直後の表示に効く。）
-    ad.bannerView.rootViewController = appContext?.utilities?.currentViewController()
+    bannerView.rootViewController = appContext?.utilities?.currentViewController()
     ad.currentAttachment = self
-    addSubview(ad.bannerView)
+    addSubview(bannerView)
   }
 
   /// 自分がまだこの広告の所有者である場合のみ View から外す。
   /// 既に別の View に奪われている場合は何もしない（奪い返さない）。
   private func detachCurrentAdIfOwned() {
     guard let currentAd, currentAd.currentAttachment === self else { return }
-    currentAd.bannerView.removeFromSuperview()
+    currentAd.bannerView?.removeFromSuperview()
     currentAd.currentAttachment = nil
   }
 
@@ -49,7 +53,7 @@ final class BannerAdView: ExpoView {
     // でないと、奪われた後の古い View がレイアウトされるたびに、今は別の View が
     // 表示している広告のフレームを書き換えてしまう。
     guard let currentAd, currentAd.currentAttachment === self else { return }
-    currentAd.bannerView.frame = bounds
+    currentAd.bannerView?.frame = bounds
   }
 
   deinit {
@@ -59,7 +63,7 @@ final class BannerAdView: ExpoView {
     guard let currentAd else { return }
     runOnMain {
       guard currentAd.currentAttachment === self else { return }
-      currentAd.bannerView.removeFromSuperview()
+      currentAd.bannerView?.removeFromSuperview()
       currentAd.currentAttachment = nil
     }
   }
