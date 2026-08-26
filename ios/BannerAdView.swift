@@ -45,7 +45,11 @@ final class BannerAdView: ExpoView {
 
   override func layoutSubviews() {
     super.layoutSubviews()
-    currentAd?.bannerView.frame = bounds
+    // 所有権を失っている（別の View に奪われた）場合はフレームを触らない。
+    // でないと、奪われた後の古い View がレイアウトされるたびに、今は別の View が
+    // 表示している広告のフレームを書き換えてしまう。
+    guard let currentAd, currentAd.currentAttachment === self else { return }
+    currentAd.bannerView.frame = bounds
   }
 
   deinit {

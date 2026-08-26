@@ -1,12 +1,22 @@
 import ExpoModulesCore
 import GoogleMobileAds
 
+/// `MobileAds.shared.start()` を明示的にメインスレッド（`@MainActor`）で呼ぶ。GMA のヘッダーは
+/// このメソッドをメインスレッド専用とは明記していないが、GMA は慣習的にメインスレッドから
+/// 初期化するものとされており、確実にするコストは async 関数の中での 1 回のホップだけなので
+/// 迷わず main に寄せる。`initializeAsync` は元々 `AsyncFunction`（async）なので、この
+/// アクターホップは実質コスト無し。
+@MainActor
+private func startMobileAdsSDK() async -> InitializationStatus {
+  await MobileAds.shared.start()
+}
+
 public final class ExpoGoogleMobileAdsModule: Module {
   public func definition() -> ModuleDefinition {
     Name("ExpoGoogleMobileAds")
 
     AsyncFunction("initializeAsync") { () async -> [String: Any] in
-      let status = await MobileAds.shared.start()
+      let status = await startMobileAdsSDK()
       let adapterStatuses = status.adapterStatusesByClassName.mapValues { value in
         [
           "state": value.state == .ready ? "ready" : "notReady",
@@ -17,21 +27,26 @@ public final class ExpoGoogleMobileAdsModule: Module {
       return ["adapterStatuses": adapterStatuses]
     }
 
+    // setRequestConfiguration は SharedObject に紐づかない module 関数なので、
+    // registry のミューテックスを保持したまま呼ばれることはない。runOnMain（sync）で安全に
+    // メインスレッドへ寄せられる（GMA はメインスレッド初期化が慣習であるため、念のため main に統一）。
     Function("setRequestConfiguration") { (config: [String: Any?]) in
-      let requestConfiguration = MobileAds.shared.requestConfiguration
-      if let testDeviceIds = config["testDeviceIds"] as? [String] {
-        requestConfiguration.testDeviceIdentifiers = testDeviceIds
-      }
-      if let childDirected = config["tagForChildDirectedTreatment"] as? Bool {
-        requestConfiguration.tagForChildDirectedTreatment = NSNumber(value: childDirected)
-      }
-      if let underAge = config["tagForUnderAgeOfConsent"] as? Bool {
-        requestConfiguration.tagForUnderAgeOfConsent = NSNumber(value: underAge)
-      }
-      if let rating = config["maxAdContentRating"] as? String {
-        // Swift 側の型名は `GADMaxAdContentRating`（NS_TYPED_ENUM の typedef 自体に
-        // NS_SWIFT_NAME が付いていないため GAD プレフィックスが落ちない）。
-        requestConfiguration.maxAdContentRating = GADMaxAdContentRating(rawValue: rating)
+      runOnMain {
+        let requestConfiguration = MobileAds.shared.requestConfiguration
+        if let testDeviceIds = config["testDeviceIds"] as? [String] {
+          requestConfiguration.testDeviceIdentifiers = testDeviceIds
+        }
+        if let childDirected = config["tagForChildDirectedTreatment"] as? Bool {
+          requestConfiguration.tagForChildDirectedTreatment = NSNumber(value: childDirected)
+        }
+        if let underAge = config["tagForUnderAgeOfConsent"] as? Bool {
+          requestConfiguration.tagForUnderAgeOfConsent = NSNumber(value: underAge)
+        }
+        if let rating = config["maxAdContentRating"] as? String {
+          // Swift 側の型名は `GADMaxAdContentRating`（NS_TYPED_ENUM の typedef 自体に
+          // NS_SWIFT_NAME が付いていないため GAD プレフィックスが落ちない）。
+          requestConfiguration.maxAdContentRating = GADMaxAdContentRating(rawValue: rating)
+        }
       }
     }
 

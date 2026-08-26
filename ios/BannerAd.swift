@@ -11,11 +11,22 @@ import UIKit
 /// 呼ばれるか保証されない（`AsyncFunction` の既定キューもメインではない）ため、UIKit/GMA に
 /// 触れる箇所はすべてこの関数でメインスレッドへ同期させる。
 ///
-/// デッドロックについて: `Thread.isMainThread` の早期リターンにより、既にメインスレッドから
-/// 呼ばれた場合の自己デッドロック（再入）は起きない。残るリスクは「メインスレッドが、この
-/// 関数の呼び出し元スレッドを同期的に待っている」という逆方向の依存が同時に存在する場合だが、
-/// このモジュール内にそのようなコードパスは無い（メインスレッドから JS スレッドを同期的に
-/// 待つ処理は存在しない）。したがって現状で現実的なデッドロック経路は無いと判断した。
+/// デッドロックについて（訂正）: 以前ここには「メインスレッドが JS スレッドを同期的に待つ
+/// 経路は存在しない」と書いていたが、これは誤りだった。React Native の New Architecture では
+/// `AppleEventBeat::activityDidChange` → `EventBeat::induce()` →
+/// `RuntimeScheduler::executeNowOnTheSameThread`（`EventBeat.cpp` 自身のコメントが
+/// "Both JS and UI thread are blocked" と明記している）という経路があり、
+/// `experimental_flushSync` やサードパーティ製ライブラリ経由でメインスレッドが JS スレッドの
+/// 完了を同期的に待つケースは実際に存在する（稀だが皆無ではない）。
+///
+/// `runOnMain` 自体が安全なのは次の理由による: `Thread.isMainThread` の早期リターンにより、
+/// 既にメインスレッドから呼ばれた場合の自己再入（自己デッドロック）は起きない。そして、
+/// ここで実際に `main.sync` を使っている全ての呼び出し箇所は、**呼び出し元のスレッドが
+/// メインスレッドから見て競合し得るロックを保持したまま呼ばれることがない**箇所だけに
+/// 限定している（＝ロックの順序反転が起きない）。逆に、レジストリのミューテックスを保持
+/// したまま呼ばれる `sharedObjectWillRelease()` のような箇所では、この `runOnMain`
+/// （＝`main.sync`）を使ってはいけない。そこでは `DispatchQueue.main.async` を使う
+/// （詳細は `sharedObjectWillRelease` のコメントと task-7-report.md の Fix round 2 を参照）。
 func runOnMain<T>(_ block: () -> T) -> T {
   if Thread.isMainThread {
     return block()
@@ -160,13 +171,39 @@ final class BannerAd: SharedObject {
   /// `currentAd` プロパティ自体は（Fabric のリサイクルで prepareForRecycle が呼ばれても）
   /// 誰も明示的に nil にしてくれないままになり得るが、少なくともネイティブの広告表示・
   /// インプレッション計測・イベント発火は確実に止める。
+  ///
+  /// **`runOnMain`（＝`DispatchQueue.main.sync`）を使ってはいけない**: `SharedObjectRegistry.delete`
+  /// はレジストリの `Mutex`（`state.withLock`）を保持したままこのメソッドを呼ぶ
+  /// （`SharedObjectRegistry.swift` の `delete(_:)` を参照）。一方、メインスレッドで
+  /// `BannerAdView` に `ad` prop がセットされるときは `ExpoFabricViewObjC` の
+  /// `updateProps` → `DynamicSharedObjectType.cast` → `registry.get` → 同じ `state.withLock`
+  /// という経路で同じミューテックスを取りに行く。ここで `main.sync` を使うと
+  /// 「JS スレッド: レジストリのロックを保持 → メインスレッドの完了待ち」
+  /// 「メインスレッド: 別の広告のマウント処理でレジストリのロック待ち」という
+  /// 逆向きの依存が同時に成立し得て、ロックの順序が反転してデッドロックする
+  /// （ビルドはもちろん、ふつうの手動テストでも再現しにくく、アプリが無言でフリーズする）。
+  ///
+  /// そのため、テアダウンに必要な値（`view` への強参照と `self`）だけをローカルにキャプチャし、
+  /// `DispatchQueue.main.async` で後始末をメインスレッドへ「投げっぱなし」にする。これにより
+  /// このメソッド自身は一切ブロックせずに即座に返り、`state.withLock` はすぐに解放される
+  /// （＝レジストリ側は誰の完了も待たない）。オブジェクトは解放される途中なので後始末が
+  /// 非同期でも問題ない。`view` をクロージャが強参照する間は `GADBannerView` も
+  /// （そしてそれを保持する `self` も）解放されず、この async ブロックが実行されるまで
+  /// 生存が保証される。この間に他から `_bannerView`/`currentAttachment` を触れるのは
+  /// メインスレッド上のコードだけであり、それらは GCD のメインキュー上でこの async
+  /// ブロックと直列化されるため、途中で不整合な状態を観測されることはない。
   override func sharedObjectWillRelease() {
-    runOnMain {
-      guard let view = _bannerView else { return }
+    guard let view = _bannerView else { return }
+    DispatchQueue.main.async {
       view.delegate = nil
       view.paidEventHandler = nil
       view.removeFromSuperview()
-      currentAttachment = nil
+      self.currentAttachment = nil
+      // GADBannerView（UIView）の最後の強参照をここで手放すことで、UIView の解放が
+      // メインスレッド上で起きるようにする（このメソッド自体は JS スレッドなど
+      // 任意のスレッドから呼ばれ得るため、ここで nil にしないと dealloc がどのスレッドで
+      // 起きるか保証できない）。
+      self._bannerView = nil
     }
   }
 
