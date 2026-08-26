@@ -48,6 +48,29 @@ describe('initialize', () => {
 
     expect(task).not.toHaveBeenCalled();
   });
+
+  it('初期化が失敗した後、再度呼び出すとネイティブの初期化が再実行される', async () => {
+    mockNative.initializeAsync.mockRejectedValueOnce(new Error('boom'));
+    await expect(initialize()).rejects.toThrow('boom');
+
+    mockNative.initializeAsync.mockResolvedValueOnce(status);
+    await expect(initialize()).resolves.toBe(status);
+
+    expect(mockNative.initializeAsync).toHaveBeenCalledTimes(2);
+  });
+
+  it('失敗後の再初期化が成功すると保留中のタスクが実行される', async () => {
+    mockNative.initializeAsync.mockRejectedValueOnce(new Error('boom'));
+    const task = jest.fn();
+    runWhenInitialized(task);
+    await expect(initialize()).rejects.toThrow('boom');
+    expect(task).not.toHaveBeenCalled();
+
+    mockNative.initializeAsync.mockResolvedValueOnce(status);
+    await initialize();
+
+    expect(task).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('runWhenInitialized', () => {

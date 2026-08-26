@@ -14,10 +14,17 @@ export function initialize(): Promise<InitializationStatus> {
   queue.markInitializeCalled();
 
   if (!pendingInitialization) {
-    pendingInitialization = NativeModule.initializeAsync().then((status) => {
-      queue.resolve();
-      return status;
-    });
+    pendingInitialization = NativeModule.initializeAsync().then(
+      (status) => {
+        queue.resolve();
+        return status;
+      },
+      (error) => {
+        // 失敗を次回の initialize() で再試行できるよう、キャッシュをクリアしてから再送出する。
+        pendingInitialization = null;
+        throw error;
+      }
+    );
   }
 
   return pendingInitialization;
