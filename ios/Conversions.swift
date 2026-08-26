@@ -22,11 +22,14 @@ func responseInfoToDictionary(_ info: ResponseInfo?) -> [String: Any?]? {
     "responseId": info.responseIdentifier,
     "mediationAdapterClassName": info.loadedAdNetworkResponseInfo?.adNetworkClassName,
     "adSourceName": info.loadedAdNetworkResponseInfo?.adSourceName,
+    // 注意: `GADAdNetworkResponseInfo` に `description` という公開プロパティは存在しない。
+    // 以前はここで NSObject 既定の `.description`（意味のあるヒューマンリーダブル文字列である
+    // 保証がない、実質ゴミ値）を詰めていたため削除した。TypeScript 側の `AdapterResponse` 型から
+    // `description` フィールドを外すのはコーディネーター側の対応待ち。
     "adapterResponses": info.adNetworkInfoArray.map { network -> [String: Any?] in
       [
         "adapterClassName": network.adNetworkClassName,
         "latencyMillis": Int(network.latency * 1000),
-        "description": network.description,
         "adError": network.error.map { errorToDictionary($0) },
       ]
     },

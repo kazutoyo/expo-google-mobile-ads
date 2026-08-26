@@ -35,50 +35,63 @@ public final class ExpoGoogleMobileAdsModule: Module {
       }
     }
 
+    // これら 3 つのサイズ計算関数は JS API 上あえて同期関数にしている（呼び出し側がレイアウトを
+    // 広告ロード前にインラインで確定させ、後からのレイアウトシフトを避けるため）。一方
+    // `GADAdSize.h` はこれらの多くを "must be called on the main queue" と明記しているため、
+    // 同期のまま `runOnMain` でメインスレッドへホップする。
     Function("getAnchoredAdaptiveSize") { (width: Double, orientation: String) -> [String: Any] in
-      let adSize: AdSize
-      switch orientation {
-      case "portrait": adSize = portraitAnchoredAdaptiveBanner(width: width)
-      case "landscape": adSize = landscapeAnchoredAdaptiveBanner(width: width)
-      default: adSize = currentOrientationAnchoredAdaptiveBanner(width: width)
+      runOnMain {
+        let adSize: AdSize
+        switch orientation {
+        case "portrait": adSize = portraitAnchoredAdaptiveBanner(width: width)
+        case "landscape": adSize = landscapeAnchoredAdaptiveBanner(width: width)
+        default: adSize = currentOrientationAnchoredAdaptiveBanner(width: width)
+        }
+        return ["width": adSize.size.width, "height": adSize.size.height]
       }
-      return ["width": adSize.size.width, "height": adSize.size.height]
     }
 
     Function("getLargeAnchoredAdaptiveSize") { (width: Double, orientation: String) -> [String: Any] in
-      let adSize: AdSize
-      switch orientation {
-      case "portrait": adSize = largePortraitAnchoredAdaptiveBanner(width: width)
-      case "landscape": adSize = largeLandscapeAnchoredAdaptiveBanner(width: width)
-      default: adSize = largeAnchoredAdaptiveBanner(width: width)
+      runOnMain {
+        let adSize: AdSize
+        switch orientation {
+        case "portrait": adSize = largePortraitAnchoredAdaptiveBanner(width: width)
+        case "landscape": adSize = largeLandscapeAnchoredAdaptiveBanner(width: width)
+        default: adSize = largeAnchoredAdaptiveBanner(width: width)
+        }
+        return ["width": adSize.size.width, "height": adSize.size.height]
       }
-      return ["width": adSize.size.width, "height": adSize.size.height]
     }
 
     Function("getInlineAdaptiveSize") { (width: Double, maxHeight: Double?, orientation: String) -> [String: Any] in
-      let adSize: AdSize
-      if let maxHeight {
-        adSize = inlineAdaptiveBanner(width: width, maxHeight: maxHeight)
-      } else {
-        switch orientation {
-        case "portrait": adSize = portraitInlineAdaptiveBanner(width: width)
-        case "landscape": adSize = landscapeInlineAdaptiveBanner(width: width)
-        default: adSize = currentOrientationInlineAdaptiveBanner(width: width)
+      runOnMain {
+        let adSize: AdSize
+        if let maxHeight {
+          adSize = inlineAdaptiveBanner(width: width, maxHeight: maxHeight)
+        } else {
+          switch orientation {
+          case "portrait": adSize = portraitInlineAdaptiveBanner(width: width)
+          case "landscape": adSize = landscapeInlineAdaptiveBanner(width: width)
+          default: adSize = currentOrientationInlineAdaptiveBanner(width: width)
+          }
         }
+        return ["width": adSize.size.width, "height": adSize.size.height]
       }
-      return ["width": adSize.size.width, "height": adSize.size.height]
     }
 
     Class(BannerAd.self) {
-      Constructor { (adUnitId: String, size: [String: Any?], requestOptions: [String: Any?]?) -> BannerAd in
-        BannerAd(adUnitId: adUnitId, size: size, requestOptions: requestOptions)
+      Constructor { (adUnitId: String, size: [String: Any?], requestOptions: [String: Any?]?) throws -> BannerAd in
+        try BannerAd(adUnitId: adUnitId, size: size, requestOptions: requestOptions)
       }
 
       Property("size") { (ad: BannerAd) in ad.requestedSize }
-      Property("status") { (ad: BannerAd) in ad.status }
-      Property("error") { (ad: BannerAd) in ad.error }
-      Property("loadedSize") { (ad: BannerAd) in ad.loadedSize }
-      Property("responseInfo") { (ad: BannerAd) in ad.responseInfo }
+      // status/error/loadedSize/responseInfo は BannerViewDelegate のコールバック（メイン
+      // スレッド）から書き込まれる。Swift の Dictionary はスレッドセーフではないため、JS 側
+      // からの読み取りも runOnMain でメインスレッドへ同期し、書き込みと直列化する。
+      Property("status") { (ad: BannerAd) in runOnMain { ad.status } }
+      Property("error") { (ad: BannerAd) in runOnMain { ad.error } }
+      Property("loadedSize") { (ad: BannerAd) in runOnMain { ad.loadedSize } }
+      Property("responseInfo") { (ad: BannerAd) in runOnMain { ad.responseInfo } }
 
       Function("load") { (ad: BannerAd) in ad.load() }
 

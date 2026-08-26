@@ -30,7 +30,11 @@ export type PaidEventValue = {
 export type RequestOptions = {
   keywords?: string[];
   contentUrl?: string;
-  networkExtras?: Record<string, Record<string, string>>;
+  // networkExtras は意図的に含めていない: メディエーションアダプター固有の
+  // GADAdNetworkExtras/AdNetworkExtras を要求するため、具体的なアダプターを実装する
+  // タスクなしに汎用的な変換ができない。フィールドを型に生やしたままネイティブ側で
+  // 無視すると「効くはずのものが効かない」false な約束になるため、実装されるまでは
+  // 型からも外す（後から追加してもフィールド追加は破壊的変更にならない）。
 };
 
 export type RequestConfiguration = {

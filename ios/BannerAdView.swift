@@ -6,22 +6,41 @@ final class BannerAdView: ExpoView {
   private var currentAd: BannerAd?
 
   func setAd(_ ad: BannerAd?) {
-    if currentAd === ad { return }
-    currentAd?.bannerView.removeFromSuperview()
+    // `currentAd === ad` だけでは不十分: 別の View にこの広告を奪われた後、
+    // 同じ ad が再び props で渡ってきても（`ad.bannerView.superview` が自分ではなくなっている
+    // ため）二度と取り戻せず、この View が永久に空白のままになってしまう
+    // （実際に自分がまだ画面に出しているときだけ早期リターンする）。
+    if currentAd === ad, ad?.bannerView.superview === self {
+      return
+    }
+    detachCurrentAdIfOwned()
     currentAd = ad
 
     guard let ad else { return }
-    // 他の View に載ったままなら外す（後勝ち）
-    if ad.bannerView.superview != nil {
+    // 別の View がまだこの広告の所有者として記録されていて、かつ実際に画面（window）に
+    // 乗っているときだけ警告する。`deinit` のタイミングは不定なので、単なる再マウント
+    // （古い View インスタンスがまだ解放されていないだけ）では所有権 or window のどちらかが
+    // 外れており、警告は鳴らない。両方 true のときだけが本当の「同時使用」。
+    if let otherOwner = ad.currentAttachment, otherOwner !== self, ad.bannerView.window != nil {
       log.warn(
         "同じ広告が複数の BannerAdView に渡されています。最後にマウントされた View にのみ表示されます。"
       )
-      ad.bannerView.removeFromSuperview()
     }
+    ad.bannerView.removeFromSuperview()
     // このバージョンの ExpoView (ExpoFabricView) には `reactViewController()` が無いため、
     // `appContext.utilities.currentViewController()` で表示中の view controller を取得する。
+    // （`load()` 時にも都度解決し直しているので、ここでの設定はマウント直後の表示に効く。）
     ad.bannerView.rootViewController = appContext?.utilities?.currentViewController()
+    ad.currentAttachment = self
     addSubview(ad.bannerView)
+  }
+
+  /// 自分がまだこの広告の所有者である場合のみ View から外す。
+  /// 既に別の View に奪われている場合は何もしない（奪い返さない）。
+  private func detachCurrentAdIfOwned() {
+    guard let currentAd, currentAd.currentAttachment === self else { return }
+    currentAd.bannerView.removeFromSuperview()
+    currentAd.currentAttachment = nil
   }
 
   override func layoutSubviews() {
@@ -30,7 +49,14 @@ final class BannerAdView: ExpoView {
   }
 
   deinit {
-    // 広告は破棄しない。View から外すだけ。
-    currentAd?.bannerView.removeFromSuperview()
+    // 広告は破棄しない。自分がまだ所有者の場合のみ View から外す。
+    // deinit はメインスレッドで呼ばれるとは限らないため、UIKit に触れる処理は
+    // runOnMain で明示的にメインスレッドへ同期する。
+    guard let currentAd else { return }
+    runOnMain {
+      guard currentAd.currentAttachment === self else { return }
+      currentAd.bannerView.removeFromSuperview()
+      currentAd.currentAttachment = nil
+    }
   }
 }
