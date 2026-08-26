@@ -3,7 +3,13 @@ import type { SharedObject } from 'expo-modules-core/types';
 import type { BannerAdSize } from './BannerAdSize';
 import NativeModule from './ExpoGoogleMobileAdsModule';
 import { runWhenInitialized } from './initialization';
-import type { AdError, BannerAdStatus, PaidEventValue, RequestOptions, ResponseInfo } from './types';
+import type {
+  AdError,
+  BannerAdStatus,
+  PaidEventValue,
+  RequestOptions,
+  ResponseInfo,
+} from './types';
 
 export type BannerAdEvents = {
   statusChange: (payload: { status: BannerAdStatus; error?: AdError }) => void;

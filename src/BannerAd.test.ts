@@ -1,3 +1,7 @@
+import { createBannerAd } from './BannerAd';
+import NativeModule from './ExpoGoogleMobileAdsModule';
+import { runWhenInitialized } from './initialization';
+
 jest.mock('./ExpoGoogleMobileAdsModule', () => ({
   __esModule: true,
   default: { BannerAd: jest.fn() },
@@ -6,10 +10,6 @@ jest.mock('./ExpoGoogleMobileAdsModule', () => ({
 jest.mock('./initialization', () => ({
   runWhenInitialized: jest.fn(),
 }));
-
-import NativeModule from './ExpoGoogleMobileAdsModule';
-import { runWhenInitialized } from './initialization';
-import { createBannerAd } from './BannerAd';
 
 // babel-jest hoists the `import` requires above a plain top-level `const`,
 // so a jest.fn() declared before jest.mock() would be captured as `undefined`
