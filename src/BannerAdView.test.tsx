@@ -15,7 +15,7 @@ import { BannerAdView } from './BannerAdView';
 const size = { width: 360, height: 50 };
 
 function makeAd(overrides: any = {}) {
-  return { status: 'loading', ...overrides } as any;
+  return { status: 'loading', size, ...overrides } as any;
 }
 
 beforeEach(() => jest.clearAllMocks());

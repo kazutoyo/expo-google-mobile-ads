@@ -18,7 +18,5 @@ export type BannerAdViewProps = {
 export function BannerAdView({ ad, style }: BannerAdViewProps) {
   const size = ad.loadedSize ?? ad.size;
 
-  return (
-    <NativeView ad={ad} style={[{ width: size?.width, height: size?.height }, style]} />
-  );
+  return <NativeView ad={ad} style={[{ width: size.width, height: size.height }, style]} />;
 }

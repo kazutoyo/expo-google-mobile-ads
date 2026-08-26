@@ -42,20 +42,46 @@ export function validateAppId(appId: string | undefined, platform: 'android' | '
   return appId;
 }
 
+/** dependencies { } に不足分の implementation 行だけを追記する。既にある行は再追記しない。 */
+export function injectAndroidDependencies(contents: string, dependencies: string[]): string {
+  const lines = dependencies
+    .filter((dep) => !contents.includes(dep))
+    .map((dep) => `    implementation "${dep}"`)
+    .join('\n');
+
+  if (!lines) return contents;
+
+  return contents.replace(/dependencies\s*\{/, (match) => `${match}\n${lines}`);
+}
+
+/** allprojects { repositories { } } に不足分の maven リポジトリだけを追記する。既にある URL は再追記しない。 */
+export function injectAndroidMavenRepositories(contents: string, repositories: string[]): string {
+  const lines = repositories
+    .filter((url) => !contents.includes(url))
+    .map((url) => `        maven { url "${url}" }`)
+    .join('\n');
+
+  if (!lines) return contents;
+
+  return contents.replace(/allprojects\s*\{\s*repositories\s*\{/, (match) => `${match}\n${lines}`);
+}
+
+/** Podfile に不足分の pod 行だけを追記する。既に同名の pod がある場合は再追記しない。 */
+export function injectIosPods(contents: string, pods: Record<string, string>): string {
+  let result = contents;
+
+  for (const [name, version] of Object.entries(pods)) {
+    if (result.includes(`pod '${name}'`)) continue;
+    const line = `  pod '${name}', '${version}'`;
+    result = result.replace(/(\n\s*use_expo_modules!)/, `\n${line}$1`);
+  }
+
+  return result;
+}
+
 function withAndroidDependencies(config: any, dependencies: string[]) {
   return withAppBuildGradle(config, (cfg: any) => {
-    const lines = dependencies
-      .filter((dep) => !cfg.modResults.contents.includes(dep))
-      .map((dep) => `    implementation "${dep}"`)
-      .join('\n');
-
-    if (lines) {
-      cfg.modResults.contents = cfg.modResults.contents.replace(
-        /dependencies\s*\{/,
-        (match: string) => `${match}\n${lines}`
-      );
-    }
-
+    cfg.modResults.contents = injectAndroidDependencies(cfg.modResults.contents, dependencies);
     return cfg;
   });
 }
@@ -65,15 +91,8 @@ function withIosPods(config: any, pods: Record<string, string>) {
     'ios',
     (cfg: any) => {
       const podfilePath = path.join(cfg.modRequest.platformProjectRoot, 'Podfile');
-      let contents = fs.readFileSync(podfilePath, 'utf8');
-
-      for (const [name, version] of Object.entries(pods)) {
-        const line = `  pod '${name}', '${version}'`;
-        if (contents.includes(`pod '${name}'`)) continue;
-        contents = contents.replace(/(\n\s*use_expo_modules!)/, `\n${line}$1`);
-      }
-
-      fs.writeFileSync(podfilePath, contents);
+      const contents = fs.readFileSync(podfilePath, 'utf8');
+      fs.writeFileSync(podfilePath, injectIosPods(contents, pods));
       return cfg;
     },
   ]);
@@ -111,15 +130,10 @@ const withGoogleMobileAds: ConfigPlugin<Options> = (config, options = {}) => {
 
   if (options.androidMavenRepositories?.length) {
     config = withProjectBuildGradle(config, (cfg) => {
-      const repositories = options
-        .androidMavenRepositories!.map((url) => `        maven { url "${url}" }`)
-        .join('\n');
-
-      cfg.modResults.contents = cfg.modResults.contents.replace(
-        /allprojects\s*\{\s*repositories\s*\{/,
-        (match) => `${match}\n${repositories}`
+      cfg.modResults.contents = injectAndroidMavenRepositories(
+        cfg.modResults.contents,
+        options.androidMavenRepositories!
       );
-
       return cfg;
     });
   }

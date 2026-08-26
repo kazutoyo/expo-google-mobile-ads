@@ -10,7 +10,7 @@
     "build:plugin": "tsc --project plugin",
     "clean": "node internal/module_scripts/clean.js",
     "lint": "eslint src/",
-    "test": "jest",
+    "test": "jest --forceExit",
     "prepare": "node internal/module_scripts/prepare.js",
     "open:ios": "node internal/module_scripts/open-ios.js",
     "open:android": "node internal/module_scripts/open-android.js"
@@ -32,6 +32,7 @@
     "@babel/core": "^7.26.0",
     "@testing-library/react-native": "^14.0.1",
     "@types/jest": "^29.2.1",
+    "@types/node": "^26.3.0",
     "@types/react": "~19.1.1",
     "babel-preset-expo": "~57.0.9",
     "eslint": "~9.39.4",
