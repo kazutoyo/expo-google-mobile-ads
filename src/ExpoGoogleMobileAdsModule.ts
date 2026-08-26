@@ -1,5 +1,18 @@
-import { NativeModule, requireNativeModule } from 'expo';
+import { requireNativeModule } from 'expo';
 
-declare class ExpoGoogleMobileAdsModule extends NativeModule<{}> {}
+import type { InitializationStatus, RequestConfiguration } from './types';
+
+declare class ExpoGoogleMobileAdsModule {
+  BannerAd: any;
+  initializeAsync(): Promise<InitializationStatus>;
+  setRequestConfiguration(config: RequestConfiguration): void;
+  getAnchoredAdaptiveSize(width: number, orientation: string): { width: number; height: number };
+  getLargeAnchoredAdaptiveSize(width: number, orientation: string): { width: number; height: number };
+  getInlineAdaptiveSize(
+    width: number,
+    maxHeight: number | null,
+    orientation: string
+  ): { width: number; height: number };
+}
 
 export default requireNativeModule<ExpoGoogleMobileAdsModule>('ExpoGoogleMobileAds');
