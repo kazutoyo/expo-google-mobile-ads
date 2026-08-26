@@ -4,8 +4,10 @@
   "description": "Expo Module wrapping the Google Mobile Ads (AdMob) SDK",
   "main": "build/index.js",
   "types": "build/index.d.ts",
+  "appPlugin": "./plugin/build/index.js",
   "scripts": {
     "build": "node internal/module_scripts/build.js",
+    "build:plugin": "tsc --project plugin",
     "clean": "node internal/module_scripts/clean.js",
     "lint": "eslint src/",
     "test": "jest",
