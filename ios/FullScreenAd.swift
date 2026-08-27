@@ -153,10 +153,32 @@ class FullScreenAd: SharedObject {
   func presentAd(from viewController: UIViewController) -> Bool { false }
 
   /// Subclass hook. Clears the ad's delegate and closure properties, drops it, and resets any
-  /// per-ad state (the rewarded latch). Called on the main thread from three places: release
-  /// teardown, the start of `load()`, and before a load completion replaces an existing ad. It
-  /// must therefore be idempotent and safe with no ad present.
+  /// per-ad state (the rewarded latch). Called on the main thread from four sites: release
+  /// teardown, the start of `load()`, and each subclass's `handleLoadCompletion` before it
+  /// replaces an existing ad. It must therefore be idempotent and safe with no ad present.
+  ///
+  /// **It must never run against an ad that is currently presenting** — that clears the delegate
+  /// the show promise is waiting on. `shouldDiscardLoadResult` is what keeps the completion-handler
+  /// call sites off that path.
   func tearDownAd() {}
+
+  /// Whether a load result that has just arrived must be **discarded** rather than installed.
+  ///
+  /// Installing an ad means calling `tearDownAd()` on whatever is already here, and that is
+  /// destructive: it nils `fullScreenContentDelegate` and `paidEventHandler` on the existing ad.
+  /// Doing so to an ad that is mid-presentation would drop the very delegate that
+  /// `adDidDismissFullScreenContent` arrives on, leaving `showAsync()`'s promise pending forever,
+  /// and would silently lose that ad's remaining `impression`/`clicked`/`paid` events. It would
+  /// also let `handleLoaded` resurrect the terminal `"shown"` status back to `"loaded"`, sneaking
+  /// past the guard in `load()`.
+  ///
+  /// Reachable because two loads can overlap: `load()` refuses to start a second request while a
+  /// show is in flight, but a request issued *before* the show can still land during it.
+  ///
+  /// Read on the main thread from both subclasses' `handleLoadCompletion`.
+  var shouldDiscardLoadResult: Bool {
+    isReleased || showPromise != nil || status == "shown"
+  }
 
   /// Subclass hook. What `showAsync()` resolves with on dismissal. Interstitial resolves with
   /// nothing; `FullScreenRewardedAd` overrides this to return the latched reward, or nil.

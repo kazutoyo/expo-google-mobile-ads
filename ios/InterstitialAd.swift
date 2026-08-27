@@ -35,13 +35,21 @@ final class FullScreenInterstitialAd: FullScreenAd {
       handleLoadFailed(missingAdError())
       return
     }
-    if isReleased {
-      // Released while the request was in flight. Drop the ad instead of wiring it up.
+    if shouldDiscardLoadResult {
+      // Released, a show is in flight, or this ad has already been shown. Installing would mean
+      // tearing down whatever is here — including, in the in-flight case, the delegate the show
+      // promise is waiting on. Drop this ad instead.
+      //
+      // Dropping it is complete cleanup and leaks nothing: nothing below has run yet, so its
+      // `fullScreenContentDelegate` and `paidEventHandler` are both still nil and it holds no
+      // reference to this object. Returning releases the last reference and ARC frees it. (iOS
+      // ads have no `destroy()`; that is an Android-only member.)
       return
     }
     // Two loads can overlap (the second `load()` clears `ad`, but the first request may still land
     // afterwards), so an earlier ad can be sitting here. Clear its delegate and paid closure
-    // before replacing it, or it keeps firing events into this object.
+    // before replacing it, or it keeps firing events into this object. Safe here only because the
+    // guard above has ruled out a presentation in flight.
     tearDownAd()
     // `fullScreenContentDelegate` is a weak property; the proxy is retained by `FullScreenAd`.
     ad.fullScreenContentDelegate = delegateProxy
