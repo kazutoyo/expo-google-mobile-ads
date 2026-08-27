@@ -60,6 +60,11 @@ final class FullScreenRewardedAd: FullScreenAd {
     if isReleased {
       return
     }
+    // Two loads can overlap (the second `load()` clears `ad`, but the first request may still land
+    // afterwards), so an earlier ad can be sitting here. This clears its delegate and paid closure
+    // and — critically — resets the earned-reward latch, so no reward from a previous ad can be
+    // read out by this one.
+    tearDownAd()
     ad.fullScreenContentDelegate = delegateProxy
     ad.paidEventHandler = { [weak self] value in
       self?.emitPaid(value)
@@ -103,10 +108,18 @@ final class FullScreenRewardedAd: FullScreenAd {
     return _didEarnReward ? _reward : nil
   }
 
+  /// Also **resets the latch**. `_didEarnReward` belongs to one presentation of one ad object; a
+  /// flag left set from a previous ad would make the next `show()` resolve with a reward nobody
+  /// earned. `load()` calls this before starting a new request, and `handleLoadCompletion` calls
+  /// it before replacing an ad, so no load can ever begin with the latch already set.
   override func tearDownAd() {
     ad?.fullScreenContentDelegate = nil
     ad?.paidEventHandler = nil
     ad = nil
+    rewardLock.lock()
+    _didEarnReward = false
+    _reward = nil
+    rewardLock.unlock()
   }
 }
 

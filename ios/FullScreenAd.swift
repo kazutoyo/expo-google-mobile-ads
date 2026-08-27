@@ -83,6 +83,24 @@ class FullScreenAd: SharedObject {
         // request and leak an ad object.
         return
       }
+      // **`"shown"` is terminal.** Both SDKs treat these ads as single-use (iOS answers a second
+      // `present(from:)` with `AdAlreadyUsed`, Android with `AD_REUSED`) and `FullScreenAdStatus`
+      // in src/types.ts documents it that way, so reloading a shown ad would revive a spent
+      // object. On rewarded that is a real-money bug: the earned-reward latch belongs to the
+      // presentation that set it, and carrying it into a second one would resolve `show()` with a
+      // reward nobody earned. Refuse, leaving the status at `"shown"`.
+      if status == "shown" {
+        return
+      }
+      // A reload while a presentation is in flight would tear the ad out from under it and orphan
+      // the show promise.
+      if showPromise != nil {
+        return
+      }
+      // Drop anything left from a previous load — the old ad's delegate and paid closure, and (on
+      // rewarded) the earned-reward latch and reward snapshot. Nothing from a previous load may
+      // survive into this one.
+      tearDownAd()
       setStatus("loading", error: nil)
       loadAd(request: makeRequest())
     }
@@ -93,6 +111,10 @@ class FullScreenAd: SharedObject {
   /// because no GMA callback is ever going to fire.
   func markLoadFailed(_ message: String) {
     DispatchQueue.main.async { [self] in
+      // Same check the load-success path makes: a released ad reports nothing.
+      if isReleased {
+        return
+      }
       setStatus("error", error: [
         "code": -1,
         "message": message,
@@ -130,8 +152,10 @@ class FullScreenAd: SharedObject {
   @MainActor
   func presentAd(from viewController: UIViewController) -> Bool { false }
 
-  /// Subclass hook. Clears the ad's delegate and closure properties and drops it. Called on the
-  /// main thread from the teardown block.
+  /// Subclass hook. Clears the ad's delegate and closure properties, drops it, and resets any
+  /// per-ad state (the rewarded latch). Called on the main thread from three places: release
+  /// teardown, the start of `load()`, and before a load completion replaces an existing ad. It
+  /// must therefore be idempotent and safe with no ad present.
   func tearDownAd() {}
 
   /// Subclass hook. What `showAsync()` resolves with on dismissal. Interstitial resolves with
@@ -153,6 +177,10 @@ class FullScreenAd: SharedObject {
 
   /// Called by a subclass from its load completion handler, on the main thread.
   func handleLoadFailed(_ error: Error) {
+    // Same check the load-success path makes.
+    if isReleased {
+      return
+    }
     setStatus("error", error: errorToDictionary(error))
   }
 
