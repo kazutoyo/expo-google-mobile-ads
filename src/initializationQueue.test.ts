@@ -1,11 +1,13 @@
 import { createInitializationQueue } from './initializationQueue';
 
+const noop = () => {};
+
 describe('createInitializationQueue', () => {
   it('queues a task without running it before initialization completes', () => {
     const queue = createInitializationQueue();
     const task = jest.fn();
 
-    queue.run(task);
+    queue.run(task, noop);
 
     expect(task).not.toHaveBeenCalled();
   });
@@ -14,8 +16,8 @@ describe('createInitializationQueue', () => {
     const queue = createInitializationQueue();
     const order: number[] = [];
 
-    queue.run(() => order.push(1));
-    queue.run(() => order.push(2));
+    queue.run(() => order.push(1), noop);
+    queue.run(() => order.push(2), noop);
     queue.resolve();
 
     expect(order).toEqual([1, 2]);
@@ -26,7 +28,7 @@ describe('createInitializationQueue', () => {
     queue.resolve();
     const task = jest.fn();
 
-    queue.run(task);
+    queue.run(task, noop);
 
     expect(task).toHaveBeenCalledTimes(1);
   });
@@ -35,11 +37,55 @@ describe('createInitializationQueue', () => {
     const queue = createInitializationQueue();
     const task = jest.fn();
 
-    queue.run(task);
+    queue.run(task, noop);
     queue.resolve();
     queue.resolve();
 
     expect(task).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports the error to queued tasks on reject, without running them', () => {
+    const queue = createInitializationQueue();
+    const task = jest.fn();
+    const onInitializationError = jest.fn();
+    const error = new Error('boom');
+
+    queue.run(task, onInitializationError);
+    queue.reject(error);
+
+    expect(task).not.toHaveBeenCalled();
+    expect(onInitializationError).toHaveBeenCalledWith(error);
+  });
+
+  it('only reports a rejection once, and keeps the queue open for a retry', () => {
+    const queue = createInitializationQueue();
+    const onInitializationError = jest.fn();
+    const task = jest.fn();
+
+    queue.run(task, onInitializationError);
+    queue.reject(new Error('boom'));
+    queue.reject(new Error('boom again'));
+
+    expect(onInitializationError).toHaveBeenCalledTimes(1);
+
+    const retried = jest.fn();
+    queue.run(retried, noop);
+    queue.resolve();
+
+    expect(retried).toHaveBeenCalledTimes(1);
+    // The task that was already reported as failed must not be run by the later success.
+    expect(task).not.toHaveBeenCalled();
+  });
+
+  it('ignores a rejection that arrives after resolve', () => {
+    const queue = createInitializationQueue();
+    const onInitializationError = jest.fn();
+
+    queue.run(jest.fn(), onInitializationError);
+    queue.resolve();
+    queue.reject(new Error('boom'));
+
+    expect(onInitializationError).not.toHaveBeenCalled();
   });
 
   it('tracks whether initialize has been called', () => {

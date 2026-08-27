@@ -5,9 +5,10 @@ Pod::Spec.new do |s|
   s.description    = 'Expo Module wrapping the Google Mobile Ads (AdMob) SDK'
   s.author         = 'Kazutoyo Tokai <tokai.kazutoyo@tellernovel.com>'
   s.homepage       = 'https://github.com/kazutoyo/expo-google-mobile-ads'
+  # iOS only. Google-Mobile-Ads-SDK 13.x declares `platforms: { ios: 12.0 }` and ships no tvOS
+  # slice, so declaring :tvos here only makes `pod install` fail for a tvOS target.
   s.platforms      = {
-    :ios => '16.4',
-    :tvos => '16.4'
+    :ios => '16.4'
   }
   s.source         = { git: 'https://github.com/kazutoyo/expo-google-mobile-ads' }
   s.static_framework = true

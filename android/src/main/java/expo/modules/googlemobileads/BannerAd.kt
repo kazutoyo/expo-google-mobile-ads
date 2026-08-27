@@ -283,6 +283,18 @@ class BannerAd(
     emitStatusChange()
   }
 
+  /**
+   * Reports a failure that happened before `load()` could even run — currently only "the SDK
+   * failed to initialize", which the JS side detects. Without this the ad would sit on
+   * `loading` forever with no error anywhere, since no GMA callback is ever going to fire.
+   *
+   * Posted to main for the same reason as [load]: this is called synchronously from the JS
+   * thread, and every other write to the state/`statusChange` pair happens on main.
+   */
+  fun markLoadFailed(message: String) {
+    mainHandler.post { setError(message) }
+  }
+
   private fun setError(message: String) {
     // [Review fix — Minor] Aligned wording with iOS ("ExpoGoogleMobileAds", matching iOS's
     // resolveRootViewController() failure, rather than "expo-google-mobile-ads").

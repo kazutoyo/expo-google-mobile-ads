@@ -1,11 +1,26 @@
-import { renderHook } from '@testing-library/react-native';
+import { act, renderHook } from '@testing-library/react-native';
 
 import { useBannerAd, useBannerAdState } from './useBannerAd';
 
-const mockUseEvent = jest.fn();
 const mockUseReleasingSharedObject = jest.fn();
 
-jest.mock('expo', () => ({ useEvent: (...args: any[]) => mockUseEvent(...args) }));
+// Mirrors expo's own useEventListener (node_modules/expo/src/hooks/useEvent.ts): re-subscribes
+// whenever the emitter changes, and always calls the latest listener.
+jest.mock('expo', () => {
+  const { useEffect, useRef } = require('react');
+  return {
+    useEventListener: (emitter: any, eventName: string, listener: any) => {
+      const listenerRef = useRef(listener);
+      listenerRef.current = listener;
+      useEffect(() => {
+        const subscription = emitter.addListener(eventName, (...args: any[]) =>
+          listenerRef.current(...args)
+        );
+        return () => subscription.remove();
+      }, [emitter, eventName]);
+    },
+  };
+});
 jest.mock('expo-modules-core', () => ({
   useReleasingSharedObject: (...args: any[]) => mockUseReleasingSharedObject(...args),
 }));
@@ -17,30 +32,35 @@ jest.mock('../initialization', () => ({ runWhenInitialized: jest.fn() }));
 
 const size = { width: 360, height: 50 };
 
+let nextSharedObjectId = 1;
+
 function makeAd(overrides: any = {}) {
-  return { status: 'loading', load: jest.fn(), ...overrides } as any;
+  const listeners = new Set<(payload: any) => void>();
+  return {
+    status: 'loading',
+    // release() zeroes this out; ids handed out by the registry start at 1.
+    __expo_shared_object_id__: nextSharedObjectId++,
+    load: jest.fn(),
+    markLoadFailed: jest.fn(),
+    addListener(_eventName: string, listener: (payload: any) => void) {
+      listeners.add(listener);
+      return { remove: () => listeners.delete(listener) };
+    },
+    /** Stands in for the native side emitting statusChange after updating its own state. */
+    emitStatusChange() {
+      listeners.forEach((listener) => listener({ status: this.status, error: this.error }));
+    },
+    ...overrides,
+  } as any;
 }
 
 beforeEach(() => {
   jest.clearAllMocks();
-  mockUseEvent.mockReturnValue({ status: 'loading' });
 });
 
 describe('useBannerAdState', () => {
-  it('subscribes to the passed ad\'s statusChange', async () => {
-    const ad = makeAd({ status: 'loading' });
-
-    await renderHook(() => useBannerAdState(ad));
-
-    expect(mockUseEvent).toHaveBeenCalledWith(ad, 'statusChange', {
-      status: 'loading',
-      error: undefined,
-    });
-  });
-
-  it('isLoaded is true when loaded', async () => {
-    mockUseEvent.mockReturnValue({ status: 'loaded' });
-    const ad = makeAd({ loadedSize: size });
+  it('reports the ad state it starts out in', async () => {
+    const ad = makeAd({ status: 'loaded', loadedSize: size });
 
     const { result } = await renderHook(() => useBannerAdState(ad));
 
@@ -48,14 +68,71 @@ describe('useBannerAdState', () => {
     expect(result.current.loadedSize).toEqual(size);
   });
 
+  it('follows the ad through statusChange', async () => {
+    const ad = makeAd();
+
+    const { result } = await renderHook(() => useBannerAdState(ad));
+    expect(result.current.isLoaded).toBe(false);
+
+    await act(async () => {
+      ad.status = 'loaded';
+      ad.loadedSize = size;
+      ad.emitStatusChange();
+    });
+
+    expect(result.current.isLoaded).toBe(true);
+    expect(result.current.loadedSize).toEqual(size);
+  });
+
   it('isLoaded is false and returns the error on error', async () => {
     const error = { code: 3, message: 'No fill', domain: 'com.google.admob' };
-    mockUseEvent.mockReturnValue({ status: 'error', error });
+    const ad = makeAd({ status: 'error', error });
 
-    const { result } = await renderHook(() => useBannerAdState(makeAd()));
+    const { result } = await renderHook(() => useBannerAdState(ad));
 
     expect(result.current.isLoaded).toBe(false);
     expect(result.current.error).toBe(error);
+  });
+
+  // useBannerAd recreates the ad whenever adUnitId/size changes (a rotation with
+  // useBannerAdSize does exactly that), and the state of the previous ad used to carry over —
+  // isLoaded stayed true for an ad that was still loading, so `{isLoaded && <BannerAdView/>}`
+  // rendered a blank banner.
+  it('resets to the new ad state when a different ad is passed', async () => {
+    const loaded = makeAd({ status: 'loaded', loadedSize: size });
+    const failed = { code: 3, message: 'No fill', domain: 'com.google.admob' };
+
+    const { result, rerender } = await renderHook((ad: any) => useBannerAdState(ad), {
+      initialProps: loaded,
+    });
+    expect(result.current.isLoaded).toBe(true);
+
+    await act(async () => rerender(makeAd({ status: 'loading' })));
+
+    expect(result.current.isLoaded).toBe(false);
+    expect(result.current.loadedSize).toBeUndefined();
+
+    // ...and an error does not survive the swap either.
+    await act(async () => rerender(makeAd({ status: 'error', error: failed })));
+    expect(result.current.error).toBe(failed);
+    await act(async () => rerender(makeAd({ status: 'loading' })));
+    expect(result.current.error).toBeUndefined();
+  });
+
+  // Every property getter of a released shared object throws SharedObject.NotFoundException,
+  // which would propagate straight out of the render. Its id, note, is NOT cleared — a
+  // released ad keeps reporting the one it had, so only a probe detects it.
+  it('reports an empty state for a released ad instead of throwing', async () => {
+    const ad = makeAd({ loadedSize: size });
+    Object.defineProperty(ad, 'status', {
+      get() {
+        throw new Error('Unable to find the native shared object');
+      },
+    });
+
+    const { result } = await renderHook(() => useBannerAdState(ad));
+
+    expect(result.current.isLoaded).toBe(false);
   });
 
   it('does not create an ad when one is passed in', async () => {

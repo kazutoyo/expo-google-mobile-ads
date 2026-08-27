@@ -246,6 +246,22 @@ final class BannerAd: SharedObject {
     }
   }
 
+  /// Reports a failure that happened before `load()` could even run — currently only "the SDK
+  /// failed to initialize", which the JS side detects. Without this the ad would sit on
+  /// `loading` forever with no error anywhere, since no GMA callback is ever going to fire.
+  ///
+  /// Dispatched to main for the same reason as `load()`: this is called synchronously from the
+  /// JS thread, and every other write to the state/`statusChange` pair happens on main.
+  func markLoadFailed(_ message: String) {
+    DispatchQueue.main.async { [self] in
+      setStatus("error", error: [
+        "code": -1,
+        "message": message,
+        "domain": "ExpoGoogleMobileAds",
+      ])
+    }
+  }
+
   /// Resolves the currently-visible view controller fresh every time. If not yet mounted in a
   /// `BannerAdView` (i.e. still preloading), `Utilities.currentViewController()` may not yet
   /// have anything to return, so this falls back to the app's key window's rootViewController.

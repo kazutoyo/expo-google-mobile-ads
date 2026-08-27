@@ -141,6 +141,8 @@ public final class ExpoGoogleMobileAdsModule: Module {
       Property("responseInfo") { (ad: BannerAd) in ad.responseInfo }
 
       Function("load") { (ad: BannerAd) in ad.load() }
+      // @internal, called only by the JS side's deferred-load helper when initialize() fails.
+      Function("markLoadFailed") { (ad: BannerAd, message: String) in ad.markLoadFailed(message) }
 
       // Note: in this version of expo-modules-core, `EventsDefinition` doesn't conform to
       // `ClassDefinitionElement`, so `Events(...)` can't be used inside `Class(...)` (only

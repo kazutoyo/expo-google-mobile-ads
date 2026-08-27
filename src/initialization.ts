@@ -23,6 +23,10 @@ export function initialize(): Promise<InitializationStatus> {
       (error) => {
         // Clear the cache before rethrowing so the next initialize() call can retry.
         pendingInitialization = null;
+        // Tell everything already queued that initialization failed. Without this the failure
+        // only ever reaches whoever awaited initialize(), and every ad created beforehand
+        // stays `loading` forever with no error of its own.
+        queue.reject(error);
         throw error;
       }
     );
@@ -37,15 +41,22 @@ export function setRequestConfiguration(config: RequestConfiguration): void {
 
 /**
  * Runs a task once initialization completes. Runs immediately if already complete.
+ *
+ * `onInitializationError` is called instead of the task when initialization fails, so the
+ * caller can surface the failure. The task itself is never run in that case — nothing may load
+ * against an SDK that failed to initialize.
  */
-export function runWhenInitialized(task: () => void): void {
+export function runWhenInitialized(
+  task: () => void,
+  onInitializationError: (error: unknown) => void
+): void {
   if (__DEV__ && !queue.isInitializeCalled()) {
     console.warn(
       '[expo-google-mobile-ads] initialize() has not been called, so the ad load will not start. ' +
         'Call initialize() when your app starts.'
     );
   }
-  queue.run(task);
+  queue.run(task, onInitializationError);
 }
 
 /** @internal Test-only */

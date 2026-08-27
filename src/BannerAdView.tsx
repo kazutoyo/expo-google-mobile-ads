@@ -1,7 +1,8 @@
 import { requireNativeViewManager } from 'expo-modules-core';
 import type { StyleProp, ViewStyle } from 'react-native';
 
-import type { BannerAd } from './BannerAd';
+import { isReleased, sharedObjectIdOf, type BannerAd } from './BannerAd';
+import { useBannerAdState } from './hooks/useBannerAd';
 
 const NativeView = requireNativeViewManager('ExpoGoogleMobileAds', 'BannerAdView');
 
@@ -11,44 +12,28 @@ export type BannerAdViewProps = {
   style?: StyleProp<ViewStyle>;
 };
 
-/**
- * Hands the shared object's registry id to native instead of the object itself.
- *
- * In `__DEV__`, React Native deep-freezes every prop value it gives to a native view
- * (`ReactFabric-dev.js` -> `deepFreezeAndThrowOnMutationInDev`, which calls
- * `Object.freeze` + `Object.seal`). A frozen `SharedObject` can no longer have its internal
- * native-state property re-defined, so a later `ad.release()` throws
- * "Exception in HostFunction: failed to define internal native state property" from Hermes
- * and crashes the app. `useBannerAd` releases the old ad whenever `adUnitId` or `size`
- * changes, so an ordinary device rotation used to crash.
- *
- * A number cannot be frozen, so passing the id keeps `release()` working. Native still
- * receives a `BannerAd` — expo-modules-core converts the id back through the shared object
- * registry. `expo-video` passes `player.__expo_shared_object_id__` to `VideoView` the same way.
- *
- * `__expo_shared_object_id__` is an internal, deprecated property (see
- * `NativeViewManagerAdapter.native.tsx`'s own `typeof` guard around the identical access). If it
- * ever stops being set, an unguarded read returns `undefined`, React omits the `ad` prop
- * entirely, and the banner would go silently blank with no error anywhere. Guard it and fall
- * back to `null` instead, matching `expo-video`'s `getPlayerId`.
- */
-function sharedObjectIdOf(ad: BannerAd): number | null {
-  // @ts-expect-error internal property installed by expo-modules-core on every SharedObject
-  const sharedObjectId = ad.__expo_shared_object_id__;
-  return typeof sharedObjectId === 'number' ? sharedObjectId : null;
-}
+/** The box a released ad gets: nothing left to show, so it takes up no space. */
+const RELEASED_SIZE = { width: 0, height: 0 };
 
 /**
  * Displays an ad. Attaches the native view on mount and only detaches it on unmount —
  * the ad itself is never destroyed, so it can be reused across screen transitions.
+ *
+ * Subscribes to the ad itself rather than trusting the parent to re-render. A preloaded ad is
+ * routinely rendered with no `useBannerAdState` anywhere (that is exactly what the README's
+ * preload example does), and then nothing would re-render when the ad finishes loading, so the
+ * requested size would stick even when the served ad came back a different size.
  */
 export function BannerAdView({ ad, style }: BannerAdViewProps) {
-  const size = ad.loadedSize ?? ad.size;
+  const { loadedSize } = useBannerAdState(ad);
+  // Callers can legitimately still be rendering an ad they just released. Reading `ad.size`
+  // would then throw, and handing native an id whose registry entry is gone throws the same
+  // exception during prop application, so a released ad gets no id and no space at all.
+  const released = isReleased(ad);
+  const sharedObjectId = released ? null : sharedObjectIdOf(ad);
+  const size = released ? RELEASED_SIZE : (loadedSize ?? ad.size);
 
   return (
-    <NativeView
-      ad={sharedObjectIdOf(ad)}
-      style={[{ width: size.width, height: size.height }, style]}
-    />
+    <NativeView ad={sharedObjectId} style={[{ width: size.width, height: size.height }, style]} />
   );
 }

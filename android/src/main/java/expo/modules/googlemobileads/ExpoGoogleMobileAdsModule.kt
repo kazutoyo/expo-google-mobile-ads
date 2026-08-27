@@ -232,6 +232,8 @@ class ExpoGoogleMobileAdsModule : Module() {
       Property("responseInfo") { ad: BannerAd -> ad.responseInfo }
 
       Function("load") { ad: BannerAd -> ad.load() }
+      // @internal, called only by the JS side's deferred-load helper when initialize() fails.
+      Function("markLoadFailed") { ad: BannerAd, message: String -> ad.markLoadFailed(message) }
 
       Events("statusChange", "impression", "clicked", "paid")
     }

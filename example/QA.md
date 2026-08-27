@@ -13,6 +13,24 @@ Use the test App ID / ad unit IDs (never a production ID).
       overflow its container's width (e.g. the OPEN button isn't clipped on the side). Record the
       container width (with padding excluded), the ad's requested width, and the resulting height
 
+## Banner sizes
+
+Press "Show the banner size gallery". Each card creates its own ad with `useBannerAd` and draws a
+red outline around the box `BannerAdView` reserves, so clipping, letterboxing and overflow are
+visible. For every size record: whether it loads and renders, requested size vs `loadedSize`, and
+whether it fits its container.
+
+The card's inner width is printed on each card. `FULL_BANNER` (468dp) and `LEADERBOARD` (728dp) are
+**wider than a phone screen** — record what actually happens rather than marking it a failure.
+
+- [ ] `BANNER` (320x50)
+- [ ] `LARGE_BANNER` (320x100)
+- [ ] `MEDIUM_RECTANGLE` (300x250)
+- [ ] `FULL_BANNER` (468x60) — wider than the card
+- [ ] `LEADERBOARD` (728x90) — wider than the card
+- [ ] `inlineAdaptive` with no `maxHeight`
+- [ ] `inlineAdaptive` with `maxHeight: 100` (the resolved height must not exceed it)
+
 ## Reuse (the library's core feature)
 
 - [ ] Switching to screen B and back to screen A shows the preloaded ad again **instantly, with no
@@ -31,8 +49,25 @@ Use the test App ID / ad unit IDs (never a production ID).
 
 ## Errors
 
-- [ ] Pressing "Switch hook-created banner to a bad ad unit ID" populates `error`, including
+- [ ] Pressing "Switch to a bad ad unit ID (recreates the ad)" populates `error`, including
       `responseInfo`
+
+## Code-review fixes
+
+- [ ] **Stale state across ad recreation**: rotate the device (the hook-created banner's adaptive
+      size changes, so `useBannerAd` builds a new ad). The FIRST `[QA] hook render:` line logged
+      after the size changes must already read `isLoaded=false`. Same check after pressing
+      "Switch to a bad ad unit ID": the first line after the switch must not carry the old ad's
+      `isLoaded=true`, and switching back to the valid unit must not carry the old `error`
+- [ ] **Preloaded ad adopts `loadedSize`**: on the unsubscribed card (no `useBannerAdState`
+      anywhere), the banner appears and fills the red outline with no letterboxing, even though
+      nothing in the app re-renders it
+- [ ] **Release with a View still mounted**: pressing "Release the unsubscribed ad while its View
+      is mounted" collapses that banner to a 0x0 box and does not crash (before the fix, native
+      received shared object id `0` and threw `SharedObject.NotFoundException`)
+- [ ] **Unmount during initialization**: set `INITIALIZE_DELAY_MS = 5000`, then press "Hide the
+      hook-created banner" before initialization resolves. No crash, and no `load()` on a released
+      ad in the logs
 
 ## Additional items (verifying recent native fixes)
 
