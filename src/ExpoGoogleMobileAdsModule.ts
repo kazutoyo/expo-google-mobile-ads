@@ -4,6 +4,8 @@ import type { InitializationStatus, RequestConfiguration } from './types';
 
 declare class ExpoGoogleMobileAdsModule {
   BannerAd: any;
+  InterstitialAd: any;
+  RewardedAd: any;
   initializeAsync(): Promise<InitializationStatus>;
   setRequestConfiguration(config: RequestConfiguration): void;
   getAnchoredAdaptiveSize(width: number, orientation: string): { width: number; height: number };
