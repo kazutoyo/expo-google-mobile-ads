@@ -7,13 +7,11 @@ import com.google.android.libraries.ads.mobile.sdk.banner.AdSize
 import com.google.android.libraries.ads.mobile.sdk.common.RequestConfiguration
 import com.google.android.libraries.ads.mobile.sdk.initialization.AdapterStatus
 import com.google.android.libraries.ads.mobile.sdk.initialization.InitializationConfig
-import expo.modules.kotlin.exception.CodedException
 import expo.modules.kotlin.exception.Exceptions
 import expo.modules.kotlin.functions.Coroutine
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
@@ -21,16 +19,6 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 
 private val mainHandler = Handler(Looper.getMainLooper())
-
-private const val MAIN_THREAD_TIMEOUT_MS = 5_000L
-
-/**
- * [Review fix — C1] `runOnMain` が UI スレッドから応答を得られなかったときの例外。
- * 以前は待ち合わせが無期限（`latch.await()` に引数なし）だったため、main 側の
- * Runnable が例外で終了すると `countDown()` に到達せず JS スレッドが永久に停止した。
- */
-class UiThreadUnresponsiveException :
-  CodedException(message = "UI スレッドが ${MAIN_THREAD_TIMEOUT_MS}ms 以内に応答しませんでした。")
 
 /**
  * メインスレッド上ならそのまま実行し、そうでなければメインスレッドへ同期的にホップしてから
@@ -43,33 +31,19 @@ class UiThreadUnresponsiveException :
  * UI 関連の状態を UI スレッド以外から読むのは一般的な Android の作法に反するため、
  * 安全側に倒して明示的にメインスレッドへホップする。
  *
- * [Review fix — C1, レビュー指摘を受けて全面的に書き直し]
- * 以前の実装には3つの実バグがあった:
- *   (a) 投げられた例外を捕まえておらず、`countDown()` が `finally` の外にあったため、
- *       main 側の Runnable が例外を投げると `countDown()` に到達せず JS スレッドが
- *       **確定的に**無期限ハングする（`Exceptions.MissingActivity()` を投げるプリロード時の
- *       経路が、この不具合をまさにこのライブラリの主要ユースケースで踏む）。
- *   (b) `latch.await()` にタイムアウトが無く、ハングは即 ANR（回復不能）だった。
- *   (c) React Native の New Architecture には UI スレッドが JS ランタイムの完了を
- *       同期的に待つ経路が存在する
- *       （`AndroidEventBeat::tick` → `induce()` →
- *       `executeSynchronouslyOnSameThread_CAN_DEADLOCK`、`EventBeat.h:99` の
- *       "Both JS and UI thread are blocked" というコメントが示す通り）。
- *       これは「ロックを保持しているか」の話ではなく、**JS ランタイムそのものが
- *       競合資源になり得る**という話であり、以前のコメントが「registry のロックを
- *       保持したまま呼ばれることはないので安全」としていたのは誤った論拠だった。
- *       iOS 側もまさにこの理由で `main.sync` の使用箇所を絞り込んだ経緯がある。
- *
- * 対応: (a)(b) は `try/finally` + タイムアウト付き `await` で解消した — 例外は
- * `error` に捕まえて JS スレッド側で re-throw し、`countDown()` は必ず `finally` で
- * 呼ばれる。タイムアウトした場合は無期限ハングではなく `UiThreadUnresponsiveException`
- * という回復可能なエラーになる。(c) は本質的には解消していない —
- * この3つの同期関数を「JS 側の同期 API 契約」として残す限り、UI スレッドが
- * 塞がっている間の同期呼び出しには理論上のリスクが残る。iOS も同じ理由でこの種の
- * 呼び出しパターン自体は残しており（`sharedObjectWillRelease` のような「レジストリの
- * ロックを保持したまま呼ばれる」経路からは撤去したが、これらのサイズ計算関数からは
- * 撤去していない）、ここでも同じ判断に倣った。つまり (c) は「起きなくなった」の
- * ではなく「境界を持つ回復可能なエラーに変えた」ことで許容範囲に収めている。
+ * [Review fix round 3 — item 1, タイムアウトは撤去]
+ * fix round 2 で追加したタイムアウト（無応答なら `UiThreadUnresponsiveException` を
+ * 投げる）はコーディネーターの指示で撤去した。理由: `useBannerAdSize` はレンダー中の
+ * `useMemo` でこれを呼ぶため、フォールバックしても `useBannerAd` 側の
+ * `useReleasingSharedObject` の依存配列 `[adUnitId, size.width, size.height]` が
+ * 変わってしまい、プリロード済みの広告を release してサイズ違いの広告を作り直す
+ * ことになり、しかも回転やリサイズが起きない限り二度と直らない。
+ * 「5秒 UI スレッドが詰まる」は既にプラットフォームが検知して trace 付きで報告する
+ * ANR であり、それを「広告のサイズが永久に狂う」という無言の劣化に変えるのは改悪。
+ * 例外を発生させること自体をやめ、iOS の `runOnMain`（`DispatchQueue.main.sync`）
+ * と同じく無期限に待つ。`try/finally` による `countDown()` の確実な実行と、
+ * 捕まえた例外を JS スレッド側で re-throw する部分（fix round 1 で直した本物の
+ * デッドロックバグ — 例外発生時に `countDown()` に到達しないケース）はそのまま残す。
  */
 private fun <T> runOnMain(block: () -> T): T {
   if (Looper.myLooper() == Looper.getMainLooper()) {
@@ -87,9 +61,7 @@ private fun <T> runOnMain(block: () -> T): T {
       latch.countDown()
     }
   }
-  if (!latch.await(MAIN_THREAD_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
-    throw UiThreadUnresponsiveException()
-  }
+  latch.await()
   error?.let { throw it }
   @Suppress("UNCHECKED_CAST")
   return result as T
@@ -264,6 +236,18 @@ class ExpoGoogleMobileAdsModule : Module() {
     View(BannerAdView::class) {
       Prop("ad") { view: BannerAdView, ad: BannerAd? ->
         view.setAd(ad)
+      }
+
+      // [Review fix round 3 — item 3] `OnViewDestroys` は `onDropViewInstance` から
+      // 呼ばれる、React Native が本当にこの View インスタンスを二度と使わないと
+      // 決めたときにだけ発火する本物の破棄フック（`onDetachedFromWindow` とは異なり、
+      // react-native-screens の一時的な画面 detach では発火しない）。ここで
+      // `detachIfOwned()` を呼び、AdView を実際に removeView する（＝
+      // `View.mParent` を確実に null にする）ことで、C3 が正しく撤去した
+      // window-detach teardown の代わりに、GC 任せではない決定的なタイミングで
+      // 所有権を手放す。
+      OnViewDestroys { view: BannerAdView ->
+        view.detachIfOwned()
       }
     }
   }

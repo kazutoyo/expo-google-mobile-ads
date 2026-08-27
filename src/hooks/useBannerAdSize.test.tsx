@@ -1,7 +1,6 @@
 import { renderHook } from '@testing-library/react-native';
 
 import NativeModule from '../ExpoGoogleMobileAdsModule';
-import { BannerAdSize } from '../BannerAdSize';
 import { useBannerAdSize } from './useBannerAdSize';
 
 jest.mock('../ExpoGoogleMobileAdsModule', () => ({
@@ -39,32 +38,5 @@ describe('useBannerAdSize', () => {
     await rerender({});
 
     expect(mockNative.getLargeAnchoredAdaptiveSize).toHaveBeenCalledTimes(2);
-  });
-
-  it('ネイティブが失敗した場合は直前のサイズにフォールバックする（レンダーをクラッシュさせない）', async () => {
-    mockUseWindowDimensions.mockReturnValue({ width: 390, height: 844 });
-    const { result, rerender } = await renderHook(() =>
-      useBannerAdSize({ type: 'largeAnchoredAdaptive' })
-    );
-    expect(result.current).toEqual({ width: 390, height: 100 });
-
-    mockNative.getLargeAnchoredAdaptiveSize.mockImplementationOnce(() => {
-      throw new Error('ERR_UI_THREAD_UNRESPONSIVE');
-    });
-    mockUseWindowDimensions.mockReturnValue({ width: 844, height: 390 });
-    await rerender({});
-
-    // 直前に成功したサイズのまま — 例外がフックの外に漏れない。
-    expect(result.current).toEqual({ width: 390, height: 100 });
-  });
-
-  it('一度も成功していない場合は既定値 BannerAdSize.BANNER にフォールバックする', async () => {
-    mockNative.getLargeAnchoredAdaptiveSize.mockImplementationOnce(() => {
-      throw new Error('ERR_UI_THREAD_UNRESPONSIVE');
-    });
-
-    const { result } = await renderHook(() => useBannerAdSize({ type: 'largeAnchoredAdaptive' }));
-
-    expect(result.current).toEqual(BannerAdSize.BANNER);
   });
 });

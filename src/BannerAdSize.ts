@@ -60,13 +60,6 @@ export const BannerAdSize = {
     );
   },
 
-  /**
-   * spec の type に応じたネイティブ関数を呼ぶ。ネイティブ側の失敗（例: Android の
-   * UI スレッドが応答しない場合の `ERR_UI_THREAD_UNRESPONSIVE`）をそのまま例外として
-   * 投げる。iOS の対応する呼び出しは失敗し得ないため、この失敗はプラットフォーム間で
-   * 完全には契約が揃っていない既知の差異。レンダー中に呼ぶ場合は例外で画面を落とさない
-   * よう `useBannerAdSize`（フォールバック済み）を使うこと。
-   */
   resolve(spec: BannerAdSizeSpec): BannerAdSize {
     switch (spec.type) {
       case 'anchoredAdaptive':

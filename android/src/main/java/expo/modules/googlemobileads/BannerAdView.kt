@@ -31,6 +31,12 @@ private const val TAG = "ExpoGoogleMobileAds"
  * これで「本当に別の View にこの広告を奪われる」ケースの後始末が漏れることはない:
  * `setAd()` は所有権の有無に関わらず `(view.parent as? ViewGroup)?.removeView(view)` を
  * 呼んでから addView するため、奪う側の `setAd()` 自体が古い親からの取り外しを保証する。
+ *
+ * [Review fix round 3 — item 3] 「本当に unmount された（が別 View にも奪われず
+ * release() もされていない）」ケースは `OnViewDestroys`（`ExpoGoogleMobileAdsModule.kt`
+ * の `View(BannerAdView::class)` ブロック）で拾う。これは `onDropViewInstance` から
+ * 呼ばれる本物の破棄フックであり、`react-native-screens` の一時的な window detach
+ * では発火しない（`onDetachedFromWindow` とは別物）ため、上記の判断とは矛盾しない。
  */
 class BannerAdView(context: Context, appContext: AppContext) : ExpoView(context, appContext) {
   private var currentAd: BannerAd? = null
@@ -56,7 +62,7 @@ class BannerAdView(context: Context, appContext: AppContext) : ExpoView(context,
     if (currentAd === ad && view != null && view.parent === this) {
       return
     }
-    detachCurrentAdIfOwned()
+    detachIfOwned()
     currentAd = ad
 
     // `ensureAdView()` が null を返すのは Activity が本当に無い場合と release() 済みの
@@ -80,8 +86,13 @@ class BannerAdView(context: Context, appContext: AppContext) : ExpoView(context,
     requestLayout()
   }
 
-  /** 自分がまだこの広告の所有者である場合のみ View から外す。既に別の View に奪われている場合は何もしない（奪い返さない）。 */
-  private fun detachCurrentAdIfOwned() {
+  /**
+   * 自分がまだこの広告の所有者である場合のみ View から外す。既に別の View に奪われている
+   * 場合は何もしない（奪い返さない）。`setAd()` の再割り当て時と、`OnViewDestroys`
+   * （この View が本当に破棄されるとき、[Review fix round 3 — item 3]）の両方から呼ぶため
+   * `internal`。
+   */
+  internal fun detachIfOwned() {
     val ad = currentAd ?: return
     if (ad.currentAttachment !== this) return
     ad.adView?.let { removeView(it) }
