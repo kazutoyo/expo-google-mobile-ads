@@ -199,8 +199,15 @@ class FullScreenAd: SharedObject {
 
   /// Called by a subclass from its load completion handler, on the main thread.
   func handleLoadFailed(_ error: Error) {
-    // Same check the load-success path makes.
-    if isReleased {
+    // The same guard the success path uses, and it subsumes the `isReleased` check that used to be
+    // here. A load failure must never be recorded while an ad is presenting or after it has shown:
+    // with two loads outstanding, a late failure from request #1 would overwrite `"shown"` with
+    // `"error"` and emit a `statusChange` reporting a successful impression as a failure. Worse,
+    // `load()`'s terminal guard tests only `status == "shown"`, so an ad parked on `"error"` can be
+    // loaded and shown a second time — this is the last path that could reopen the terminal-status
+    // invariant that rounds 1 and 2 exist to protect. There is no legitimate case where a failure
+    // should land in either state, so discarding it is strictly correct.
+    if shouldDiscardLoadResult {
       return
     }
     setStatus("error", error: errorToDictionary(error))
