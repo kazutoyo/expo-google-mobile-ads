@@ -2,6 +2,7 @@ package expo.modules.googlemobileads
 
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.view.ViewGroup
 import com.google.android.libraries.ads.mobile.sdk.banner.AdSize
 import com.google.android.libraries.ads.mobile.sdk.banner.AdView
@@ -14,9 +15,11 @@ import com.google.android.libraries.ads.mobile.sdk.common.LoadAdError
 import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.exception.CodedException
 import expo.modules.kotlin.sharedobjects.SharedObject
+import java.lang.ref.WeakReference
 import com.google.android.libraries.ads.mobile.sdk.banner.BannerAd as GmaBannerAd
 
 private val mainHandler = Handler(Looper.getMainLooper())
+private const val TAG = "ExpoGoogleMobileAds"
 
 /**
  * `size` に数値の width/height が含まれていない場合のエラー。iOS 版の
@@ -27,12 +30,20 @@ class InvalidBannerSizeException :
   CodedException(message = "BannerAd の size には数値の width と height が必要です")
 
 /**
- * [Review fix 1 — I4] `status`/`error`/`loadedSize`/`responseInfo` を1つの不変スナップショット
+ * [Review fix — I4] `status`/`error`/`loadedSize`/`responseInfo` を1つの不変スナップショット
  * にまとめ、単一の `@Volatile` 参照で公開する。個別に `@Volatile` を付けるだけでは
- * 「フィールドごとの可視性」は保証されても「複数フィールドの組」の一貫性は保証されない
- * （例: JS 側が `status`/`error` を1レンダー内で読むと、書き込みの途中状態
- * `{status: "error", error: null}` を観測しうる）。丸ごと新しいインスタンスに
- * 差し替えることで、読み取り側は常にどれか1つの一貫したスナップショットだけを見る。
+ * 「フィールドごとの可視性」は保証されても「複数フィールドの組」の一貫性は保証されない。
+ *
+ * [Review fix round 2 — item 5,保証範囲の訂正]
+ * これが保証するのは「ネイティブ側の**1回の読み取り**内での一貫性」だけである
+ * （例: `emitStatusChange()` は `state` を1度だけローカル変数に読み、その1つの
+ * スナップショットから `status`/`error` を組み立てるので、そのイベントペイロード内では
+ * 必ず一致した組が送られる）。JS 側は `ad.status` と `ad.error` を Expo の
+ * `Property` 経由で**別々の呼び出し**として読むため、2つの呼び出しの間に
+ * ネイティブ側の書き込みが挟まれば `{status: "error", error: null}` のような
+ * 不一致は依然として観測しうる。これは iOS 側（`runOnMain` でメインスレッドの
+ * 書き込みと直列化しているだけで、JS からの2回の呼び出し自体は独立している）と
+ * 同じ制約であり、この変更による退行ではない。
  */
 private data class LoadState(
   val status: String,
@@ -75,8 +86,25 @@ class BannerAd(
    * 読み書きは常に `BannerAdView` のメソッド経由で、それらは常に UI スレッドから
    * 呼ばれる（Expo/RN の View prop 適用・ライフサイクルコールバックは UI スレッド固定）
    * ため `@Volatile` は不要。
+   *
+   * [Review fix round 2 — item 3] iOS の `weak var currentAttachment` に合わせて
+   * `WeakReference` で保持する。C3 対応で `onDetachedFromWindow` の teardown を
+   * 撤去した結果、画面が本当に unmount された（がこの ad は release() も
+   * 別 View への再割り当てもされていない）場合、それを検知して片付ける native 側の
+   * フックが無くなった。ここが強参照のままだと、その `BannerAdView`（と、それが保持する
+   * Activity 由来の Context）が ad の生存期間だけ確実にリークする。弱参照にすることで、
+   * 少なくとも「`BannerAd` 自身がその View を生かし続ける」という経路は断つ
+   * （`AdView.getParent()` が同じ View を指す経路自体は、Android の View 階層の
+   * 内部実装であり弱参照化できない。これは ad が再利用されるか release() されるまで
+   * 残る — もともと「ロードした広告を破棄せず持ち回す」というこのライブラリの設計が
+   * 前提として抱える範囲であり、今回の変更で悪化はしていない）。
    */
-  var currentAttachment: BannerAdView? = null
+  private var currentAttachmentRef: WeakReference<BannerAdView>? = null
+  var currentAttachment: BannerAdView?
+    get() = currentAttachmentRef?.get()
+    set(value) {
+      currentAttachmentRef = value?.let { WeakReference(it) }
+    }
 
   /**
    * `sharedObjectDidRelease()` によるテアダウンが済んだかどうか。true になったら
@@ -199,9 +227,18 @@ class BannerAd(
 
     ad.bannerAdRefreshCallback = object : BannerAdRefreshCallback {
       override fun onAdRefreshed() {
+        // [Review fix round 2 — item 2] 以前はここで null を静かに無視しており、
+        // 更新チェーンが音も無く止まっていた（C2 がまさに問題にしていた「イベントが
+        // 飛ばなくなる」症状を、ログも残さずに再現していた）。起こり得ないはずだが
+        // （`onAdRefreshed()` が呼ばれた直後なら `adView` は必ず新しい広告を
+        // 保持しているはず）、万一 null が返ってきた場合はログを残し、更新チェーンを
+        // 沈黙させたまま放置せずロード失敗として JS 側に伝える。
         val refreshed = adView?.getBannerAd()
         if (refreshed != null) {
           onAdReady(refreshed)
+        } else {
+          Log.w(TAG, "広告の自動更新(refresh)後に AdView.getBannerAd() が null を返しました。更新を継続できません。")
+          setError("広告の自動更新に失敗しました（更新後の広告インスタンスを取得できませんでした）。")
         }
       }
 
@@ -248,10 +285,20 @@ class BannerAd(
    */
   override fun sharedObjectDidRelease() {
     isReleased = true
-    currentAttachment = null
     val view = adView ?: return
+    // [Review fix round 2 — item 4] `currentAttachment` は UI スレッド専用のフィールド
+    // （上のコメント参照）だが、`sharedObjectDidRelease()` 自体は release() を呼んだ
+    // 任意のスレッド（典型的には JS スレッド）から呼ばれる。以前はここで直接代入して
+    // いたが、それは呼び出し元スレッド上での off-thread な書き込みになってしまう。
+    // 他の後始末と同じく main への post の中で行う。
     mainHandler.post {
-      view.getBannerAd()?.adEventCallback = null
+      currentAttachment = null
+      // [Review fix round 2 — item 2] adEventCallback だけでなく
+      // bannerAdRefreshCallback もクリアする。
+      view.getBannerAd()?.let {
+        it.adEventCallback = null
+        it.bannerAdRefreshCallback = null
+      }
       (view.parent as? ViewGroup)?.removeView(view)
       view.destroy()
     }
