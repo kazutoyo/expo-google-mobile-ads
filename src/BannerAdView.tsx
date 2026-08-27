@@ -25,10 +25,17 @@ export type BannerAdViewProps = {
  * A number cannot be frozen, so passing the id keeps `release()` working. Native still
  * receives a `BannerAd` — expo-modules-core converts the id back through the shared object
  * registry. `expo-video` passes `player.__expo_shared_object_id__` to `VideoView` the same way.
+ *
+ * `__expo_shared_object_id__` is an internal, deprecated property (see
+ * `NativeViewManagerAdapter.native.tsx`'s own `typeof` guard around the identical access). If it
+ * ever stops being set, an unguarded read returns `undefined`, React omits the `ad` prop
+ * entirely, and the banner would go silently blank with no error anywhere. Guard it and fall
+ * back to `null` instead, matching `expo-video`'s `getPlayerId`.
  */
-function sharedObjectIdOf(ad: BannerAd): number {
+function sharedObjectIdOf(ad: BannerAd): number | null {
   // @ts-expect-error internal property installed by expo-modules-core on every SharedObject
-  return ad.__expo_shared_object_id__;
+  const sharedObjectId = ad.__expo_shared_object_id__;
+  return typeof sharedObjectId === 'number' ? sharedObjectId : null;
 }
 
 /**

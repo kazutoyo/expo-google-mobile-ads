@@ -4,6 +4,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.view.ViewGroup
+import java.lang.ref.WeakReference
 import com.google.android.libraries.ads.mobile.sdk.banner.AdSize
 import com.google.android.libraries.ads.mobile.sdk.banner.AdView
 import com.google.android.libraries.ads.mobile.sdk.banner.BannerAdEventCallback
@@ -115,10 +116,16 @@ class BannerAd(
    * that lost the ad to a second view would stay blank forever, because its `ad` prop never changes
    * and Fabric therefore never calls `setAd` on it again.
    *
-   * A plain (strong) reference for the same reason as `currentAttachment`; it is cleared
-   * deterministically in `BannerAdView.onDestroy()`.
+   * `WeakReference`, matching iOS's `weak var previousAttachment`. This does NOT transfer the
+   * "a plain reference costs nothing" reasoning that applies to `currentAttachment` below:
+   * `BannerAd -> adView -> (mParent) -> BannerAdView` keeps `currentAttachment`'s view reachable
+   * regardless, but the view referenced here is by definition no longer `adView.parent` — that is
+   * the whole point of the field — so nothing else pins it. A strong reference here would retain a
+   * destroyed view (and, through it, its Activity) whenever the view that recorded it is torn down
+   * without itself being the current owner (so `BannerAdView.onDestroy()` cannot clear this field
+   * for it) — see `detachIfOwned()`'s `handBack` parameter for the related ownership-timing fix.
    */
-  var previousAttachment: BannerAdView? = null
+  var previousAttachment: WeakReference<BannerAdView>? = null
 
   /**
    * `sharedObjectDidRelease()` によるテアダウンが済んだかどうか。true になったら

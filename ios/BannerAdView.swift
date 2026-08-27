@@ -45,26 +45,16 @@ final class BannerAdView: ExpoView {
 
   /// 自分がまだこの広告の所有者である場合のみ View から外す。
   /// 既に別の View に奪われている場合は何もしない（奪い返さない）。
+  ///
+  /// Only called from `setAd()`'s reassignment path, so it must NOT hand the ad back to
+  /// `previousAttachment` — that would fire for a view that is about to re-take the ad two lines
+  /// later (re-applying the same ad while it isn't currently this view's subview), producing a
+  /// spurious "same ad in two views" warning and a needless detach/attach churn for no real
+  /// ownership change. `deinit` below is the only place a real give-up is handled. [Review fix — F5]
   private func detachCurrentAdIfOwned() {
     guard let currentAd, currentAd.currentAttachment === self else { return }
     currentAd.bannerView?.removeFromSuperview()
     currentAd.currentAttachment = nil
-    handBackToPreviousOwner(currentAd)
-  }
-
-  /// Hands an ad that just became unowned back to the view it was taken from, as long as that
-  /// view is still alive and still wants it (`currentAd === ad`). `setAd` re-runs the normal
-  /// attach path, so the reclaiming view owns and shows the banner again.
-  ///
-  /// Without this, a view that lost its ad to a second view would stay blank forever: its `ad`
-  /// prop never changes, so Fabric never calls `setAd` on it again.
-  private func handBackToPreviousOwner(_ ad: BannerAd) {
-    guard let previous = ad.previousAttachment, previous !== self, previous.currentAd === ad else {
-      return
-    }
-    // Cleared first so the re-attach below cannot bounce the ad back and forth.
-    ad.previousAttachment = nil
-    previous.setAd(ad)
   }
 
   override func layoutSubviews() {
@@ -94,7 +84,10 @@ final class BannerAdView: ExpoView {
   deinit {
     guard let ad = currentAd else { return }
     // `deinit` is not actor-isolated and the re-attach touches UIKit, so hop to the main queue.
-    // The closure retains `ad`, which keeps the candidate view reachable until it runs.
+    // The closure retains `ad`, keeping it (and its `previousAttachment`) alive until this runs —
+    // it does NOT keep the candidate view reachable. `previousAttachment` is `weak`, so if that
+    // view has already been deallocated by the time this runs, the read below simply yields `nil`
+    // and the guard fails safely; nothing here extends that view's lifetime.
     DispatchQueue.main.async {
       guard ad.currentAttachment == nil,
             let previous = ad.previousAttachment,

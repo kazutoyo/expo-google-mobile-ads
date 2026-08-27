@@ -31,6 +31,16 @@ describe('BannerAdView', () => {
     expect(mockNativeView.mock.calls[0][0]).toMatchObject({ ad: 42 });
   });
 
+  // __expo_shared_object_id__ is deprecated; if native ever stops setting it, an unguarded
+  // read would return undefined and React would omit the `ad` prop with no error at all.
+  it('falls back to null (not undefined) when the shared object id is missing', async () => {
+    const ad = makeAd({ __expo_shared_object_id__: undefined });
+
+    await render(<BannerAdView ad={ad} />);
+
+    expect(mockNativeView.mock.calls[0][0]).toMatchObject({ ad: null });
+  });
+
   it('ロード前はリクエストしたサイズで領域を予約する', async () => {
     const ad = makeAd({ size });
 
