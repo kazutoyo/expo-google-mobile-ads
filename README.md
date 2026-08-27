@@ -256,7 +256,7 @@ export type { BannerAdViewProps };
 
 // Size utilities
 export const BannerAdSize: { ... };
-export type { AdaptiveOptions, BannerAdSizeSpec };
+export type { AdaptiveOptions, BannerAdAdaptiveKind, BannerAdSizeSpec, InlineAdaptiveOptions };
 
 // Initialization
 export function initialize(): Promise<InitializationStatus>;
