@@ -35,6 +35,13 @@ export const BannerAdSize = {
    *
    * The underlying native API is deprecated and may be removed in a future SDK major
    * version. Prefer largeAnchoredAdaptive for new implementations.
+   *
+   * This function deliberately carries no `@deprecated` tag. Large anchored adaptive
+   * banners are considerably taller (50-150dp against 50-90dp here), so choosing this
+   * one to fit a tighter layout is a legitimate decision, not an oversight — and an
+   * editor warning on every call site would only get in the way of callers who meant it.
+   * When the native API is eventually removed, delete this function outright; keeping it
+   * under a separate name from largeAnchoredAdaptive is what makes that a clean removal.
    */
   anchoredAdaptive(options: AdaptiveOptions = {}): BannerAdSize {
     return NativeModule.getAnchoredAdaptiveSize(
