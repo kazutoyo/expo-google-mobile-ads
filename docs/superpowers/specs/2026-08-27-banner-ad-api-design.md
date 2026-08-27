@@ -149,7 +149,6 @@ type BannerAdOptions = {
 type RequestOptions = {
   keywords?: string[];
   contentUrl?: string;
-  networkExtras?: Record<string, Record<string, string>>;  // メディエーション各社向け
 };
 
 class BannerAd {
@@ -185,6 +184,12 @@ type PaidEventValue = {
 ```
 
 初期状態は `'loading'`（生成時にロードが始まるため）。
+
+**`networkExtras`（メディエーションアダプタ固有のパラメータ）は当初 `RequestOptions` に含めていたが、
+実装時に取り下げた。** 各ネットワークのアダプタ固有クラスなしには汎用的な実装ができず、型に残したまま
+ネイティブ側が黙って無視する状態は「型で約束して何もしない」罠になる。フィールドを後から追加するのは
+破壊的変更ではないため、削除のコストはゼロで罠だけが消える。アダプタ固有 extras はメディエーション
+対応タスクで実装する。
 
 ### 5.2 イベント
 
