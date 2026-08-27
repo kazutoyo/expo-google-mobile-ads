@@ -24,27 +24,45 @@ import UIKit
 /// 付随する原理的なリスクであり、`runOnMain` 固有の欠陥ではない。
 ///
 /// そのためこの `runOnMain`（＝ブロッキングな `main.sync`）を使う箇所は最小限に絞ってある。
-/// 現状の呼び出し元は次の 2 箇所のみ:
-/// 1. `getAnchoredAdaptiveSize` / `getLargeAnchoredAdaptiveSize` / `getInlineAdaptiveSize`
-///    （`ExpoGoogleMobileAdsModule.swift`）。JS API 上あえて同期関数にしている
-///    （呼び出し側がロード前にレイアウトを確定させるための設計）ため非同期化できず、
-///    かつ `GADAdSize.h` がメインスレッド専用と明記しているため、同期のまま main へ寄せる
-///    以外に手が無い。これが唯一の「意図して残した」`main.sync` の使用箇所であり、
-///    残存リスクを受け入れている理由は、この呼び出しが短く・純粋な数値計算だけで・
-///    JS へ再入することが無いため。
-/// 2. `bannerView`（下記の遅延生成プロパティ）と `BannerAdView.deinit`
-///    （`BannerAdView.swift`）。どちらも実際には常にメインスレッドから呼ばれる
-///    （`load()` は `DispatchQueue.main.async` の中、`BannerAdView` の各メソッドは
-///    Fabric の `@MainActor` isolation、`deinit` だけは保証が無いので念のため）ため、
-///    `Thread.isMainThread` の早期リターンで即座に直接実行され、実質的に `main.sync` の
-///    分岐へは到達しない防御的なフォールバックに過ぎない。
+/// `ios/` 全体を grep した時点で、`runOnMain` の呼び出し元は次の 5 箇所（この関数の定義を
+/// 除く）だけである。それぞれ「なぜ非同期にできないのか」を、根拠を持って書ける範囲でだけ書く。
 ///
-/// 逆に、レジストリのミューテックスを保持したまま呼ばれる `sharedObjectWillRelease()` の
-/// ようなコードパスでは `runOnMain`（＝`main.sync`）は絶対に使わない
-/// （`DispatchQueue.main.async` を使う。詳細はそのコメントを参照）。
-/// また `status`/`error`/`loadedSize`/`responseInfo` の読み取りは JS の render のたびに
-/// 起きるホットパスであるため、ここでは main を奪い合わない `NSLock` に置き換えて
-/// データ競合だけを閉じている（`main.sync` は使っていない）。
+/// 1. `ExpoGoogleMobileAdsModule.swift` の `getAnchoredAdaptiveSize` /
+///    `getLargeAnchoredAdaptiveSize` / `getInlineAdaptiveSize`（3 箇所）。
+///    JS API 上あえて同期関数にしている（呼び出し側がロード前にレイアウトを確定させるための
+///    設計）ため非同期化できず、かつ `GADAdSize.h` がメインスレッド専用と明記しているため、
+///    同期のまま main へ寄せる以外に手が無い。**JS スレッドが JS ランタイムを保持したまま
+///    `main.sync` に到達しうるのは、この 3 箇所だけ**である（他の 2 箇所は下記のとおり JS の
+///    同期呼び出し経路上に無い）。つまり上記の残存リスクを実際に負っているのはここだけであり、
+///    承知の上で意図的に残している。受け入れる理由は、この呼び出しが短く・純粋な数値計算
+///    だけで・JS へ再入することが無いため。
+/// 2. `bannerView`（下記の遅延生成プロパティ）。`BannerView?` を返す必要があるので
+///    `DispatchQueue.main.async` にはできない。grep で確認した呼び出し元は `load()` の
+///    `DispatchQueue.main.async` ブロック（1 箇所）と `BannerAdView` の `setAd` /
+///    `detachCurrentAdIfOwned` / `layoutSubviews` / `deinit`（`deinit` は `runOnMain` の中）
+///    だけで、いずれも既にメインスレッド上にいる（`ExpoView = ExpoFabricView` が
+///    `@MainActor` であることは `ExpoModulesCore.swiftinterface` で確認した）。
+///    したがって実際には `Thread.isMainThread` の早期リターン分岐しか実行されない。
+///    （`sharedObjectWillRelease` はこのプロパティではなく `_bannerView` を直接読んでいる。）
+/// 3. `BannerAdView.deinit`（`BannerAdView.swift`）。ブロックが
+///    `currentAd.currentAttachment === self` を比較するため、解放中の `self` を escaping
+///    クロージャへ渡す `main.async` には**できない**（`runOnMain` のブロックは非 escaping
+///    なので合法）。`deinit` がメインスレッドで呼ばれる保証は無いので、ここは 2. と違って
+///    実際に `main.sync` 分岐へ入りうる。ただし `deinit` は ARC の解放時に走るのであって、
+///    同期の `Function`/`Property` の本体として JS ランタイムを保持したまま走るわけではない。
+///    上記の「JS ランタイムの奪い合い」というリスクの前提が成立しないので、1. とは別扱い。
+///
+/// なお `main.sync` を書いてよい場所とそうでない場所の区別は「呼び出し元がロックを持っているか」
+/// では**ない**（JS ランタイム自体が競合資源なので、そのような安全性の主張はできない）。
+/// ロックを保持したまま呼ばれることが分かっている `sharedObjectWillRelease()` のようなパスは
+/// デッドロック確率が跳ね上がるので論外、というだけである（そちらは `DispatchQueue.main.async`。
+/// 詳細はそのメソッドのコメントを参照）。
+///
+/// この方針で `main.sync` を外した箇所:
+/// - `status`/`error`/`loadedSize`/`responseInfo` の読み取り（JS の render のたびに走るホット
+///   パス）→ main を奪い合わない `NSLock` に置き換え、データ競合だけを閉じている。
+/// - `load()` と `setRequestConfiguration`（`ExpoGoogleMobileAdsModule.swift`）→ どちらも戻り値の
+///   無い同期 `Function` なので `DispatchQueue.main.async` で足りる。
 func runOnMain<T>(_ block: () -> T) -> T {
   if Thread.isMainThread {
     return block()
@@ -294,13 +312,20 @@ final class BannerAd: SharedObject {
   // GMA はこれらのコールバックを常にメインスレッドで呼ぶため、追加の main ホップは不要。
 
   fileprivate func handleDidReceiveAd(_ bannerView: BannerView) {
-    stateLock.lock()
-    _status = "loaded"
-    _loadedSize = [
+    // GMA を叩く処理（`adSize` / `responseInfo` の読み取りと、`adNetworkInfoArray` を辿って
+    // 辞書を組み立てる `responseInfoToDictionary`）はロックの外で先に済ませる。
+    // `stateLock` は JS の render のたびに Property getter から取られるため、そこに
+    // GMA の任意の処理と確保を挟みたくない。ロックは代入だけのために取る。
+    let size: [String: Any?] = [
       "width": bannerView.adSize.size.width,
       "height": bannerView.adSize.size.height,
     ]
-    _responseInfo = responseInfoToDictionary(bannerView.responseInfo)
+    let info = responseInfoToDictionary(bannerView.responseInfo)
+
+    stateLock.lock()
+    _status = "loaded"
+    _loadedSize = size
+    _responseInfo = info
     stateLock.unlock()
     emitStatusChange()
   }

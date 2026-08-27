@@ -27,11 +27,15 @@ public final class ExpoGoogleMobileAdsModule: Module {
       return ["adapterStatuses": adapterStatuses]
     }
 
-    // setRequestConfiguration は SharedObject に紐づかない module 関数なので、
-    // registry のミューテックスを保持したまま呼ばれることはない。runOnMain（sync）で安全に
-    // メインスレッドへ寄せられる（GMA はメインスレッド初期化が慣習であるため、念のため main に統一）。
+    // 戻り値の無い同期 `Function` なので、呼び出しスレッド（JS スレッド）を塞いで main の完了を
+    // 待つ理由が無い。`load()` と同じく `DispatchQueue.main.async` に投げるだけにしてある
+    // （同期の Function 本体は JS ランタイムを保持したまま走るため、そこからの `main.sync` は
+    // 原理的にデッドロックし得る。詳細は BannerAd.swift の `runOnMain` のコメントを参照）。
+    // main へ寄せる理由は GMA がメインスレッド初期化を慣習としているため。
+    // 非同期化しても `load()` との順序は崩れない: `load()` も同じメインキューへ async で
+    // 積むため、JS が setRequestConfiguration → load の順に呼べば FIFO でその順に実行される。
     Function("setRequestConfiguration") { (config: [String: Any?]) in
-      runOnMain {
+      DispatchQueue.main.async {
         let requestConfiguration = MobileAds.shared.requestConfiguration
         if let testDeviceIds = config["testDeviceIds"] as? [String] {
           requestConfiguration.testDeviceIdentifiers = testDeviceIds
@@ -53,7 +57,11 @@ public final class ExpoGoogleMobileAdsModule: Module {
     // これら 3 つのサイズ計算関数は JS API 上あえて同期関数にしている（呼び出し側がレイアウトを
     // 広告ロード前にインラインで確定させ、後からのレイアウトシフトを避けるため）。一方
     // `GADAdSize.h` はこれらの多くを "must be called on the main queue" と明記しているため、
-    // 同期のまま `runOnMain` でメインスレッドへホップする。
+    // 同期のまま `runOnMain` でメインスレッドへホップする以外に手が無い。
+    // このモジュールで意図的に `main.sync` に到達しうるのはこの 3 箇所だけ。残存リスク
+    // （main がその瞬間に JS ランタイムを同期的に待っていればデッドロックし得る）は
+    // BannerAd.swift の `runOnMain` のコメントに書いたとおりで、短く・数値計算だけで・
+    // JS に再入しないことを理由に受け入れている。
     Function("getAnchoredAdaptiveSize") { (width: Double, orientation: String) -> [String: Any] in
       runOnMain {
         let adSize: AdSize
