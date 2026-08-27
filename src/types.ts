@@ -52,3 +52,28 @@ export type InitializationStatus = {
     { state: 'ready' | 'notReady'; description: string; latency: number }
   >;
 };
+
+/**
+ * A full-screen ad's lifecycle. `'shown'` is terminal: these ads are one-shot on both SDKs
+ * (iOS reports `AdAlreadyUsed`, Android `AD_REUSED`), so a shown ad is never reloaded —
+ * create a new one instead.
+ */
+export type FullScreenAdStatus = 'loading' | 'loaded' | 'shown' | 'error';
+
+/** What the user earned from a rewarded ad. */
+export type AdReward = {
+  type: string;
+  amount: number;
+};
+
+/**
+ * Why `show()` rejected.
+ *
+ * `notLoaded` and `alreadyShown` are decided from the ad's own `status` before anything
+ * reaches the SDK: Android has no readiness check at all (no `isReady`/`canShow`/`isLoaded`
+ * anywhere in the Next-Gen SDK), so asking the SDK is not an option, and deciding it
+ * ourselves makes both platforms behave identically.
+ *
+ * `failedToShow` comes from the SDK's own presentation failure callback.
+ */
+export type ShowAdErrorCode = 'notLoaded' | 'alreadyShown' | 'failedToShow';
