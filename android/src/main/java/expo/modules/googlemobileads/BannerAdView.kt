@@ -16,6 +16,21 @@ private const val TAG = "ExpoGoogleMobileAds"
  * Expo/RN の View prop 適用・レイアウト・ライフサイクルコールバックはすべて UI スレッドで
  * 実行されるため、このクラスのメソッドはどれもスレッドホップ不要（`BannerAd` 側の
  * `load()`/`sharedObjectDidRelease()` とは異なり、常に main スレッド上で呼ばれる）。
+ *
+ * [Review fix — C3] `onDetachedFromWindow()` での teardown は意図的に実装しない。
+ * `react-native-screens` は非アクティブな画面をデフォルトで「破棄」ではなく
+ * 「window から detach」するだけであり、この View インスタンス自体は生き続ける
+ * （後で同じ window に再 attach される）。`onDetachedFromWindow` は画面遷移による
+ * 一時的な detach と本当の unmount を区別できないため、ここで `AdView` を
+ * removeView すると、画面へ戻ってきたときに `ad` prop の参照が変わらない限り
+ * `setAd()` は再呼び出しされず（Fabric は参照が変化しないプロパティを再適用しない）、
+ * 誰も再度 addView しないまま永久に空白になる。iOS 側にも window-detach 相当の
+ * teardown フックは存在しない（`deinit` だけが唯一のテアダウン契機）ため、
+ * ここでは iOS に合わせて何もしない。
+ *
+ * これで「本当に別の View にこの広告を奪われる」ケースの後始末が漏れることはない:
+ * `setAd()` は所有権の有無に関わらず `(view.parent as? ViewGroup)?.removeView(view)` を
+ * 呼んでから addView するため、奪う側の `setAd()` 自体が古い親からの取り外しを保証する。
  */
 class BannerAdView(context: Context, appContext: AppContext) : ExpoView(context, appContext) {
   private var currentAd: BannerAd? = null
@@ -27,21 +42,26 @@ class BannerAdView(context: Context, appContext: AppContext) : ExpoView(context,
   override val shouldUseAndroidLayout: Boolean = true
 
   fun setAd(ad: BannerAd?) {
+    // [Review fix — I1] `load()` を待たず、この View がマウントされた時点で Activity が
+    // 解決できるなら AdView を作ってしまう（iOS が setAd 内で遅延生成するのと同じ設計）。
+    // BannerAdView は React Native の実 View としてしか存在し得ず、マウントされる時点で
+    // 必ずそれをホストする Activity が存在するため、この呼び出しはほぼ確実に成功する。
+    val view = ad?.ensureAdView()
+
     // [Lesson 5 — 奪われた広告を見捨てない]
     // `currentAd === ad` だけでは不十分: 別の View にこの広告を奪われた後、同じ ad が
-    // 再び props で渡ってきても（`ad.adView` の parent が自分ではなくなっているため）
+    // 再び props で渡ってきても（`view` の parent が自分ではなくなっているため）
     // 二度と取り戻せず、この View が永久に空白のままになってしまう
     // （実際に自分がまだ画面に出しているときだけ早期リターンする）。
-    if (currentAd === ad && ad?.adView?.parent === this) {
+    if (currentAd === ad && view != null && view.parent === this) {
       return
     }
     detachCurrentAdIfOwned()
     currentAd = ad
 
-    // `ad.adView` はまだ Activity が解決できておらず作られていない場合がある（プリロード中
-    // など）。その場合は表示するものが無いので、空の AdView を作り直してマウントしたりは
-    // しない。`release()` 済みの場合も同様に null のまま。
-    val view = ad?.adView ?: return
+    // `ensureAdView()` が null を返すのは Activity が本当に無い場合と release() 済みの
+    // 場合のみ。その場合は表示するものが無いので何もしない。
+    if (ad == null || view == null) return
 
     // 別の View がまだこの広告の所有者として記録されていて、かつ実際に画面（window）に
     // 乗っているときだけ警告する。GC のタイミングは不定なので、単なる再マウント
@@ -81,11 +101,5 @@ class BannerAdView(context: Context, appContext: AppContext) : ExpoView(context,
       MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY)
     )
     view.layout(0, 0, width, height)
-  }
-
-  override fun onDetachedFromWindow() {
-    super.onDetachedFromWindow()
-    // 広告は破棄しない。自分がまだ所有者の場合のみ View から外す。
-    detachCurrentAdIfOwned()
   }
 }
