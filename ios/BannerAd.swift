@@ -357,6 +357,7 @@ final class BannerAd: SharedObject {
       isReleased = true
       guard let view = _bannerView else { return }
       view.delegate = nil
+      view.adSizeDelegate = nil
       view.paidEventHandler = nil
       view.removeFromSuperview()
       currentAttachment = nil

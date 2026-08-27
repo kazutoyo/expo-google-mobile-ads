@@ -66,7 +66,7 @@ describe('initialize', () => {
 
   // A task queued *before* the failure has already been told the SDK failed, so it isn't run
   // again by a later success — it's the ad's owner's call whether to retry. A task queued after
-  // the failure still runs on the retry.
+  // the failure is failed immediately rather than waiting for a retry that may never come.
   // An ad created *after* a failed initialize() used to be pushed onto a queue nothing would
   // ever drain: it got no load, no error, and no dev warning (isInitializeCalled() is true), so
   // it sat on `loading` forever — the exact state reject() exists to prevent for the ads queued

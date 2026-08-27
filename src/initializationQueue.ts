@@ -18,8 +18,8 @@ export type InitializationQueue = {
    * Reports a failed initialization to everything queued so far. Queued tasks are deliberately
    * NOT run — nothing may load against an SDK that failed to initialize — but they must not be
    * dropped silently either, or the ad they belong to stays `loading` forever with no error
-   * anywhere. The queue itself stays open, so a later successful `initialize()` still runs
-   * whatever is queued after this point.
+   * anywhere. The failure is also remembered, so a task queued *after* it is failed immediately
+   * rather than joining a queue that nothing will drain.
    */
   reject(error: unknown): void;
   run(task: () => void, onInitializationError: (error: unknown) => void): void;
