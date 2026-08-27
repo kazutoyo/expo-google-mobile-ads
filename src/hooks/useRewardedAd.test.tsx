@@ -1,24 +1,62 @@
 const mockUseReleasingSharedObject = jest.fn();
 const mockUseEventListener = jest.fn();
 
-jest.mock('expo', () => ({
-  useEventListener: (...args: any[]) => mockUseEventListener(...args),
-}));
+// Mirrors expo's own useEventListener (node_modules/expo/src/hooks/useEvent.ts) and matches
+// useBannerAd.test.tsx: re-subscribes whenever the emitter changes, and always calls the
+// latest listener. Wrapped so tests can still assert on the subscribe call itself.
+jest.mock('expo', () => {
+  const { useEffect, useRef } = require('react');
+  return {
+    useEventListener: (emitter: any, eventName: string, listener: any) => {
+      mockUseEventListener(emitter, eventName, listener);
+      const listenerRef = useRef(listener);
+      listenerRef.current = listener;
+      useEffect(() => {
+        const subscription = emitter.addListener(eventName, (...args: any[]) =>
+          listenerRef.current(...args)
+        );
+        return () => subscription.remove();
+      }, [emitter, eventName]);
+    },
+  };
+});
 jest.mock('expo-modules-core', () => ({
   useReleasingSharedObject: (...args: any[]) => mockUseReleasingSharedObject(...args),
 }));
 jest.mock('../ExpoGoogleMobileAdsModule', () => ({
   __esModule: true,
-  default: { RewardedAd: jest.fn() },
+  default: {
+    // Gives ads created via `new NativeModule.RewardedAd(...)` (the `useRewardedAd` factory)
+    // the same addListener/remove shape as makeAd, since useEventListener now subscribes for
+    // real.
+    RewardedAd: jest.fn().mockImplementation(() => ({
+      addListener: jest.fn(() => ({ remove: jest.fn() })),
+    })),
+  },
 }));
 jest.mock('../initialization', () => ({ runWhenInitialized: jest.fn() }));
 
-import { renderHook } from '@testing-library/react-native';
+import { act, renderHook } from '@testing-library/react-native';
 
 import { useRewardedAd, useRewardedAdState } from './useRewardedAd';
 
 function makeAd(status = 'loading', error?: unknown) {
-  return { status, error, load: jest.fn(), showAsync: jest.fn() } as any;
+  const listeners = new Set<(payload: any) => void>();
+  return {
+    status,
+    error,
+    load: jest.fn(),
+    markLoadFailed: jest.fn(),
+    showAsync: jest.fn(),
+    addListener(_eventName: string, listener: (payload: any) => void) {
+      listeners.add(listener);
+      return { remove: () => listeners.delete(listener) };
+    },
+    /** Stands in for the native side emitting statusChange after updating its own state. */
+    emitStatusChange() {
+      listeners.forEach((listener) => listener({ status: this.status, error: this.error }));
+    },
+  } as any;
 }
 
 beforeEach(() => jest.clearAllMocks());
@@ -51,6 +89,21 @@ describe('useRewardedAdState', () => {
     expect(mockUseEventListener).toHaveBeenCalledWith(ad, 'statusChange', expect.any(Function));
   });
 
+  // This is the actual mechanism by which the hook ever updates: the native side fires
+  // statusChange, and the hook must re-read the ad and re-render with the new state.
+  it('updates isLoaded when the ad emits statusChange', async () => {
+    const ad = makeAd('loading');
+    const { result } = await renderHook(() => useRewardedAdState(ad));
+    expect(result.current.isLoaded).toBe(false);
+
+    await act(async () => {
+      ad.status = 'loaded';
+      ad.emitStatusChange();
+    });
+
+    expect(result.current.isLoaded).toBe(true);
+  });
+
   it('resets its state when handed a different ad', async () => {
     const first = makeAd('loaded');
     const { result, rerender } = await renderHook((ad: any) => useRewardedAdState(ad), {
@@ -79,6 +132,22 @@ describe('useRewardedAdState', () => {
     // returns can be mistaken for "the user earned this" — only show()'s resolved value
     // says that.
     expect((result.current as any).reward).toBeUndefined();
+  });
+
+  // Every property getter of a released shared object throws SharedObject.NotFoundException,
+  // which would propagate straight out of the render. A caller can legitimately still be
+  // holding (and rendering) an ad it just released.
+  it('reports an empty state for a released ad instead of throwing', async () => {
+    const ad = makeAd('loaded');
+    Object.defineProperty(ad, 'status', {
+      get() {
+        throw new Error('Unable to find the native shared object');
+      },
+    });
+
+    const { result } = await renderHook(() => useRewardedAdState(ad));
+
+    expect(result.current.isLoaded).toBe(false);
   });
 });
 
