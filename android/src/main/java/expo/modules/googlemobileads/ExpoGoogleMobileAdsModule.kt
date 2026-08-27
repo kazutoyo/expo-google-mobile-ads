@@ -7,6 +7,7 @@ import com.google.android.libraries.ads.mobile.sdk.banner.AdSize
 import com.google.android.libraries.ads.mobile.sdk.common.RequestConfiguration
 import com.google.android.libraries.ads.mobile.sdk.initialization.AdapterStatus
 import com.google.android.libraries.ads.mobile.sdk.initialization.InitializationConfig
+import expo.modules.kotlin.Promise
 import expo.modules.kotlin.exception.Exceptions
 import expo.modules.kotlin.functions.Coroutine
 import expo.modules.kotlin.modules.Module
@@ -238,6 +239,49 @@ class ExpoGoogleMobileAdsModule : Module() {
       Function("markLoadFailed") { ad: BannerAd, message: String -> ad.markLoadFailed(message) }
 
       Events("statusChange", "impression", "clicked", "paid")
+    }
+
+    // Full-screen ads have no view: they are constructed, load immediately, and are presented
+    // later with showAsync(). Single-use — after presentation `status` is "shown" and stays there.
+    // The `notLoaded` / `alreadyShown` guards live in JS (`assertShowable`) and are deliberately
+    // not repeated here: Android has no readiness API at all, so module-side state is the only
+    // thing that can make the two platforms agree.
+    Class(InterstitialAd::class) {
+      Constructor { adUnitId: String, requestOptions: Map<String, Any?>? ->
+        // Deliberately resolves no Activity here — the Constructor must succeed during preload,
+        // when there may be none. It is resolved on every showAsync() instead.
+        InterstitialAd(appContext, adUnitId, requestOptions)
+      }
+
+      Property("status") { ad: InterstitialAd -> ad.status }
+      Property("error") { ad: InterstitialAd -> ad.error }
+      Property("responseInfo") { ad: InterstitialAd -> ad.responseInfo }
+
+      Function("load") { ad: InterstitialAd -> ad.load() }
+      // @internal, called only by the JS side's deferred-load helper when initialize() fails.
+      Function("markLoadFailed") { ad: InterstitialAd, message: String -> ad.markLoadFailed(message) }
+      AsyncFunction("showAsync") { ad: InterstitialAd, promise: Promise -> ad.showAsync(promise) }
+
+      Events("statusChange", "showed", "dismissed", "impression", "clicked", "paid")
+    }
+
+    Class(RewardedAd::class) {
+      Constructor { adUnitId: String, requestOptions: Map<String, Any?>? ->
+        RewardedAd(appContext, adUnitId, requestOptions)
+      }
+
+      Property("status") { ad: RewardedAd -> ad.status }
+      Property("error") { ad: RewardedAd -> ad.error }
+      Property("responseInfo") { ad: RewardedAd -> ad.responseInfo }
+      // What the ad offers, readable before it is shown. Not evidence that anything was earned —
+      // only show()'s resolved value says that.
+      Property("reward") { ad: RewardedAd -> ad.reward }
+
+      Function("load") { ad: RewardedAd -> ad.load() }
+      Function("markLoadFailed") { ad: RewardedAd, message: String -> ad.markLoadFailed(message) }
+      AsyncFunction("showAsync") { ad: RewardedAd, promise: Promise -> ad.showAsync(promise) }
+
+      Events("statusChange", "showed", "dismissed", "impression", "clicked", "paid", "earnedReward")
     }
 
     View(BannerAdView::class) {
