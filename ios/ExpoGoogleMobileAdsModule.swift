@@ -1,11 +1,11 @@
 import ExpoModulesCore
 import GoogleMobileAds
 
-/// `MobileAds.shared.start()` を明示的にメインスレッド（`@MainActor`）で呼ぶ。GMA のヘッダーは
-/// このメソッドをメインスレッド専用とは明記していないが、GMA は慣習的にメインスレッドから
-/// 初期化するものとされており、確実にするコストは async 関数の中での 1 回のホップだけなので
-/// 迷わず main に寄せる。`initializeAsync` は元々 `AsyncFunction`（async）なので、この
-/// アクターホップは実質コスト無し。
+/// Explicitly calls `MobileAds.shared.start()` on the main thread (`@MainActor`). GMA's
+/// headers don't explicitly document this method as main-thread-only, but GMA is
+/// conventionally initialized from the main thread, and making sure of it costs only a single
+/// hop inside an async function, so hop to main without hesitation. `initializeAsync` is
+/// already an `AsyncFunction` (async), so this actor hop is effectively free.
 @MainActor
 private func startMobileAdsSDK() async -> InitializationStatus {
   await MobileAds.shared.start()
@@ -27,28 +27,32 @@ public final class ExpoGoogleMobileAdsModule: Module {
       return ["adapterStatuses": adapterStatuses]
     }
 
-    // 戻り値の無い同期 `Function` なので、呼び出しスレッド（JS スレッド）を塞いで main の完了を
-    // 待つ理由が無い。`load()` と同じく `DispatchQueue.main.async` に投げるだけにしてある
-    // （同期の Function 本体は JS ランタイムを保持したまま走るため、そこからの `main.sync` は
-    // 原理的にデッドロックし得る。詳細は BannerAd.swift の `runOnMain` のコメントを参照）。
-    // main へ寄せる理由は GMA がメインスレッド初期化を慣習としているため。
+    // A synchronous `Function` with no return value, so there's no reason to hold up the
+    // calling thread (the JS thread) waiting for main to finish. Just dispatches to
+    // `DispatchQueue.main.async`, same as `load()` (a synchronous Function body runs while
+    // holding the JS runtime, so calling `main.sync` from there can deadlock in principle —
+    // see the comment on `runOnMain` in BannerAd.swift for details). The reason to move it to
+    // main at all is that GMA conventionally expects main-thread initialization.
     //
-    // **順序について**: GMA は `requestConfiguration`（特に `testDeviceIdentifiers`）を
-    // `start()` より前に設定することを期待する。非同期化してもこれは崩れない。JS が
-    // setRequestConfiguration → initializeAsync の順に呼ぶ限り、両者の「メインキューへの
-    // 積み込み時点」が次の順に並ぶため:
-    //   E: 下の `DispatchQueue.main.async` — JS の同期呼び出しの最中に積まれ、
-    //      `setRequestConfiguration` が JS へ返る時点でメインキューに載っている。
-    //   M: `initializeAsync` → `await startMobileAdsSDK()`（`@MainActor`）のアクターホップ。
-    //      これは `initializeAsync` の本体が走り始めて await に到達して初めて積まれるので、
-    //      どんなに早くても JS が `initializeAsync` を呼んだ後 ——つまり E より必ず後になる。
-    // メインキューは FIFO なので E → M の順に実行され、`start()` は設定済みの状態で走る。
-    // この論証は「`initializeAsync` の本体がどのキューで走るか」に依存しない（本体が仮に
-    // main 上で走ったとしても、その実行自体が E より後に積まれたブロックになるだけ）。
-    // 依存しているのは「`@MainActor` の既定 executor がメインキューへ積む」という
-    // Swift ランタイムの実装挙動 1 点だけで、これはソースまでは追っていない。
-    // 逆に、JS 側が順序を守らなければ（先に initializeAsync を呼ぶ等）保証は無い。これは
-    // ネイティブ側では閉じられない、GMA 共通の呼び出し規約。
+    // **On ordering**: GMA expects `requestConfiguration` (particularly
+    // `testDeviceIdentifiers`) to be set before `start()`. Making this async doesn't break
+    // that. As long as JS calls setRequestConfiguration → initializeAsync in that order, the
+    // point at which each gets "queued onto the main queue" lines up in this order:
+    //   E: the `DispatchQueue.main.async` below — queued while JS's synchronous call is still
+    //      in progress, so it's already on the main queue by the time
+    //      `setRequestConfiguration` returns to JS.
+    //   M: the actor hop for `initializeAsync` → `await startMobileAdsSDK()` (`@MainActor`).
+    //      This is only queued once `initializeAsync`'s body starts running and reaches the
+    //      await, which happens after JS calls `initializeAsync` at the earliest — i.e.
+    //      necessarily after E.
+    // Since the main queue is FIFO, E runs before M, so `start()` always runs with
+    // configuration already applied. This argument doesn't depend on which queue
+    // `initializeAsync`'s body itself runs on (even if the body happened to run on main, that
+    // execution is still just a block queued after E). What it does depend on is a single
+    // piece of Swift runtime behavior — that `@MainActor`'s default executor queues onto the
+    // main queue — which hasn't been traced down to source. Conversely, if the JS side doesn't
+    // preserve the order (e.g. calling initializeAsync first), there's no guarantee — this is
+    // a GMA-wide calling convention that can't be closed off from the native side.
     Function("setRequestConfiguration") { (config: [String: Any?]) in
       DispatchQueue.main.async {
         let requestConfiguration = MobileAds.shared.requestConfiguration
@@ -62,21 +66,22 @@ public final class ExpoGoogleMobileAdsModule: Module {
           requestConfiguration.tagForUnderAgeOfConsent = NSNumber(value: underAge)
         }
         if let rating = config["maxAdContentRating"] as? String {
-          // Swift 側の型名は `GADMaxAdContentRating`（NS_TYPED_ENUM の typedef 自体に
-          // NS_SWIFT_NAME が付いていないため GAD プレフィックスが落ちない）。
+          // The Swift-side type name is `GADMaxAdContentRating` (the GAD prefix isn't dropped
+          // because the NS_TYPED_ENUM typedef itself has no NS_SWIFT_NAME).
           requestConfiguration.maxAdContentRating = GADMaxAdContentRating(rawValue: rating)
         }
       }
     }
 
-    // これら 3 つのサイズ計算関数は JS API 上あえて同期関数にしている（呼び出し側がレイアウトを
-    // 広告ロード前にインラインで確定させ、後からのレイアウトシフトを避けるため）。一方
-    // `GADAdSize.h` はこれらの多くを "must be called on the main queue" と明記しているため、
-    // 同期のまま `runOnMain` でメインスレッドへホップする以外に手が無い。
-    // このモジュールで意図的に `main.sync` に到達しうるのはこの 3 箇所だけ。残存リスク
-    // （main がその瞬間に JS ランタイムを同期的に待っていればデッドロックし得る）は
-    // BannerAd.swift の `runOnMain` のコメントに書いたとおりで、短く・数値計算だけで・
-    // JS に再入しないことを理由に受け入れている。
+    // These 3 size-calculation functions are deliberately synchronous in the JS API (by
+    // design, so the caller can finalize layout inline before the ad loads, avoiding a later
+    // layout shift). Meanwhile `GADAdSize.h` explicitly documents most of these as
+    // "must be called on the main queue", so hopping to main via `runOnMain` while staying
+    // synchronous is the only option. These 3 are the only places in this module that can
+    // deliberately reach `main.sync`. The residual risk (a deadlock if main happens to be
+    // synchronously waiting on the JS runtime at that instant) is the same as documented in
+    // the `runOnMain` comment in BannerAd.swift, and is accepted for the same reasons: the
+    // call is short, purely numeric, and never re-enters JS.
     Function("getAnchoredAdaptiveSize") { (width: Double, orientation: String) -> [String: Any] in
       runOnMain {
         let adSize: AdSize
@@ -123,12 +128,13 @@ public final class ExpoGoogleMobileAdsModule: Module {
       }
 
       Property("size") { (ad: BannerAd) in ad.requestedSize }
-      // status/error/loadedSize/responseInfo は BannerViewDelegate のコールバック（メイン
-      // スレッド）から書き込まれ、React の render のたびに JS 側から読み取られる（ホット
-      // パス）。以前はここも runOnMain（＝main.sync）でメインスレッドへ同期させていたが、
-      // main が JS ランタイムへ同期的に割り込む経路と衝突しうる上に、頻繁に呼ばれる箇所を
-      // メインスレッドの詰まり具合に晒すことになるため、BannerAd 内部の NSLock に置き換えた
-      // （詳細は BannerAd.swift 側のコメントを参照）。ここではもう main には触れていない。
+      // status/error/loadedSize/responseInfo are written from BannerViewDelegate callbacks
+      // (main thread) and read from the JS side on every React render (a hot path). These
+      // used to be synced to the main thread here too via runOnMain (i.e. main.sync), but
+      // that can collide with the path where main synchronously interrupts the JS runtime,
+      // and it exposes a frequently-called path to however backed-up main happens to be —
+      // so it's been replaced with the NSLock inside BannerAd (see the comment on the
+      // BannerAd.swift side for details). Nothing here touches main anymore.
       Property("status") { (ad: BannerAd) in ad.status }
       Property("error") { (ad: BannerAd) in ad.error }
       Property("loadedSize") { (ad: BannerAd) in ad.loadedSize }
@@ -136,11 +142,11 @@ public final class ExpoGoogleMobileAdsModule: Module {
 
       Function("load") { (ad: BannerAd) in ad.load() }
 
-      // 注意: この expo-modules-core バージョンでは `EventsDefinition` が
-      // `ClassDefinitionElement` に適合しておらず、`Class(...)` 内で `Events(...)` は使えない
-      // （`View(...)` 内でのみ有効）。SharedObject の `emit(event:payload:)` はイベント名の
-      // 事前登録を必要としないため、JS 側の `addListener("statusChange" | "impression" |
-      // "clicked" | "paid", ...)` はこのままで問題なく動作する。
+      // Note: in this version of expo-modules-core, `EventsDefinition` doesn't conform to
+      // `ClassDefinitionElement`, so `Events(...)` can't be used inside `Class(...)` (only
+      // inside `View(...)`). `SharedObject`'s `emit(event:payload:)` doesn't require
+      // pre-registering event names, so JS-side `addListener("statusChange" | "impression" |
+      // "clicked" | "paid", ...)` keeps working fine as-is.
     }
 
     View(BannerAdView.self) {

@@ -11,22 +11,22 @@ import java.lang.ref.WeakReference
 private const val TAG = "ExpoGoogleMobileAds"
 
 /**
- * 広告を表示する View。マウント時にネイティブ `AdView` を addView し、アンマウント時は
- * removeView するだけ — 広告（`BannerAd`）自体は破棄しない（[Lesson 7]）。
+ * The view that displays an ad. addViews the native `AdView` on mount and only removeViews on
+ * unmount — the ad (`BannerAd`) itself is never destroyed ([Lesson 7]).
  *
- * Expo/RN の View prop 適用・レイアウト・ライフサイクルコールバックはすべて UI スレッドで
- * 実行されるため、このクラスのメソッドはどれもスレッドホップ不要（`BannerAd` 側の
- * `load()`/`sharedObjectDidRelease()` とは異なり、常に main スレッド上で呼ばれる）。
+ * Expo/RN's View prop application, layout, and lifecycle callbacks all run on the UI thread,
+ * so none of this class's methods need a thread hop (unlike `BannerAd`'s
+ * `load()`/`sharedObjectDidRelease()`, this is always called on the main thread).
  *
- * [Review fix — C3] `onDetachedFromWindow()` での teardown は意図的に実装しない。
- * `react-native-screens` は非アクティブな画面をデフォルトで「破棄」ではなく
- * 「window から detach」するだけであり、この View インスタンス自体は生き続ける
- * （後で同じ window に再 attach される）。`onDetachedFromWindow` は画面遷移による
- * 一時的な detach と本当の unmount を区別できないため、ここで `AdView` を
- * removeView すると、画面へ戻ってきたときに `ad` prop の参照が変わらない限り
- * `setAd()` は再呼び出しされず（Fabric は参照が変化しないプロパティを再適用しない）、
- * 誰も再度 addView しないまま永久に空白になる。iOS 側にも window-detach 相当の
- * teardown フックは存在しない。ここでは iOS に合わせて何もしない。
+ * [Review fix — C3] Teardown in `onDetachedFromWindow()` is deliberately not implemented.
+ * `react-native-screens` by default only "detaches from the window" an inactive screen rather
+ * than "destroying" it — this View instance itself stays alive (and gets reattached to the
+ * same window later). `onDetachedFromWindow` can't distinguish a temporary detach from a
+ * screen transition from a real unmount, so removeView'ing the `AdView` here would mean that,
+ * upon returning to the screen, `setAd()` never gets called again unless the `ad` prop's
+ * reference changes (Fabric doesn't reapply a prop whose reference hasn't changed) — leaving
+ * it permanently blank because nobody ever addViews it again. iOS has no window-detach
+ * teardown hook either. This matches iOS by doing nothing here.
  *
  * iOS's actual per-view destroy hook is `invalidate` (`ExpoFabricViewObjC.mm`'s override,
  * reached deterministically from `RCTMountingManager.mm`'s `Delete` mutation when
@@ -36,37 +36,38 @@ private const val TAG = "ExpoGoogleMobileAds"
  * `invalidate`; the ownership handback instead runs from `deinit` (see `onDestroy()` below for
  * why that works as the real-teardown signal).
  *
- * これで「本当に別の View にこの広告を奪われる」ケースの後始末が漏れることはない:
- * `setAd()` は所有権の有無に関わらず `(view.parent as? ViewGroup)?.removeView(view)` を
- * 呼んでから addView するため、奪う側の `setAd()` 自体が古い親からの取り外しを保証する。
+ * This means the case of "this ad genuinely gets taken by another View" is never left
+ * unhandled: `setAd()` always calls `(view.parent as? ViewGroup)?.removeView(view)` before
+ * addView'ing, regardless of ownership, so the taking side's own `setAd()` guarantees removal
+ * from the old parent.
  *
- * [Review fix round 3 — item 3] 「本当に unmount された（が別 View にも奪われず
- * release() もされていない）」ケースは `OnViewDestroys`（`ExpoGoogleMobileAdsModule.kt`
- * の `View(BannerAdView::class)` ブロック）で拾う。これは `onDropViewInstance` から
- * 呼ばれる本物の破棄フックであり、`react-native-screens` の一時的な window detach
- * では発火しない（`onDetachedFromWindow` とは別物）ため、上記の判断とは矛盾しない。
+ * [Review fix round 3 — item 3] The case of "really unmounted (but not taken by another View,
+ * and not release()d either)" is caught by `OnViewDestroys` (in the `View(BannerAdView::class)`
+ * block in `ExpoGoogleMobileAdsModule.kt`). This is a genuine destroy hook called from
+ * `onDropViewInstance`, and it does not fire on `react-native-screens`'s temporary window
+ * detaches (unlike `onDetachedFromWindow`), so it doesn't contradict the decision above.
  */
 class BannerAdView(context: Context, appContext: AppContext) : ExpoView(context, appContext) {
   private var currentAd: BannerAd? = null
 
-  // ExpoView (LinearLayout) は Yoga 管理下に無い子 View を addView しても、デフォルトでは
-  // requestLayout() をトリガーに再レイアウトしてくれない（ExpoView.kt のコメント参照）。
-  // このフラグを立てることで requestLayout() のたびに measureAndLayout() が post され、
-  // 自分自身の onMeasure/onLayout が確実に呼ばれるようになる。
+  // ExpoView (a LinearLayout) doesn't, by default, trigger a re-layout via requestLayout()
+  // when a child View outside Yoga's management is addView'd (see the comment in ExpoView.kt).
+  // Setting this flag makes requestLayout() post a measureAndLayout() every time, ensuring
+  // this view's own onMeasure/onLayout actually get called.
   override val shouldUseAndroidLayout: Boolean = true
 
   fun setAd(ad: BannerAd?) {
-    // [Review fix — I1] `load()` を待たず、この View がマウントされた時点で Activity が
-    // 解決できるなら AdView を作ってしまう（iOS が setAd 内で遅延生成するのと同じ設計）。
-    // BannerAdView は React Native の実 View としてしか存在し得ず、マウントされる時点で
-    // 必ずそれをホストする Activity が存在するため、この呼び出しはほぼ確実に成功する。
+    // [Review fix — I1] Creates the AdView as soon as this View is mounted and an Activity can
+    // be resolved, without waiting for `load()` (the same design as iOS's lazy creation inside
+    // setAd). `BannerAdView` can only exist as a real React Native view, and by the time it's
+    // mounted the Activity hosting it must exist, so this call almost always succeeds.
     val view = ad?.ensureAdView()
 
-    // [Lesson 5 — 奪われた広告を見捨てない]
-    // `currentAd === ad` だけでは不十分: 別の View にこの広告を奪われた後、同じ ad が
-    // 再び props で渡ってきても（`view` の parent が自分ではなくなっているため）
-    // 二度と取り戻せず、この View が永久に空白のままになってしまう
-    // （実際に自分がまだ画面に出しているときだけ早期リターンする）。
+    // [Lesson 5 — don't abandon a stolen ad]
+    // `currentAd === ad` alone isn't enough: once another View has taken this ad, the same ad
+    // coming back through props (`view`'s parent is no longer self) can never be reclaimed,
+    // leaving this View permanently blank
+    // (the early return only fires when this view is actually still the one on screen).
     if (currentAd === ad && view != null && view.parent === this) {
       return
     }
@@ -75,21 +76,21 @@ class BannerAdView(context: Context, appContext: AppContext) : ExpoView(context,
     detachIfOwned(handBack = false)
     currentAd = ad
 
-    // `ensureAdView()` が null を返すのは Activity が本当に無い場合と release() 済みの
-    // 場合のみ。その場合は表示するものが無いので何もしない。
+    // `ensureAdView()` only returns null when there's truly no Activity, or once release()d.
+    // In either case there's nothing to show, so do nothing.
     if (ad == null || view == null) return
 
-    // 別の View がまだこの広告の所有者として記録されていて、かつ実際に画面（window）に
-    // 乗っているときだけ警告する。GC のタイミングは不定なので、単なる再マウント
-    // （古い View インスタンスがまだ回収されていないだけ）では所有権 or window の
-    // どちらかが外れており、警告は鳴らない。両方 true のときだけが本当の「同時使用」。
+    // Only warn when another View is still recorded as this ad's owner AND it's actually on
+    // screen (attached to a window). GC timing is indeterminate, so a plain remount (the old
+    // View instance just hasn't been collected yet) will have either ownership or window
+    // detached, and won't warn. Only when both are true is it a real "simultaneous use".
     // `detachIfOwned()` above already cleared our own ownership, so any owner left here is
     // another view. Remember it so the ad can go back when we give it up.
     val otherOwner = ad.currentAttachment
     if (otherOwner != null && otherOwner !== this && view.isAttachedToWindow) {
       Log.w(
         TAG,
-        "同じ広告が複数の BannerAdView に渡されています。最後にマウントされた View にのみ表示されます。"
+        "The same ad was passed to multiple BannerAdViews. Only the most recently mounted View will display it."
       )
     }
     ad.previousAttachment = otherOwner?.let(::WeakReference)
@@ -100,9 +101,10 @@ class BannerAdView(context: Context, appContext: AppContext) : ExpoView(context,
   }
 
   /**
-   * 自分がまだこの広告の所有者である場合のみ View から外す。既に別の View に奪われている
-   * 場合は何もしない（奪い返さない）。`setAd()` の再割り当て時と、`onDestroy()`
-   * （この View が本当に破棄されるとき、[Review fix round 3 — item 3]）の両方から呼ぶ。
+   * Removes the ad from the view only if this view is still its owner. Does nothing if it has
+   * already been taken by another view (doesn't steal it back). Called both from `setAd()`'s
+   * reassignment path and from `onDestroy()` (when this View is really being destroyed,
+   * [Review fix round 3 — item 3]).
    *
    * `handBack` must be `true` only from a real give-up (`onDestroy()`), not from `setAd()`'s
    * reassignment path. `setAd()` also calls this when re-applying the *same* ad to a view that
@@ -149,9 +151,9 @@ class BannerAdView(context: Context, appContext: AppContext) : ExpoView(context,
 
   override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
     super.onLayout(changed, l, t, r, b)
-    // 所有権を失っている（別の View に奪われた）場合は AdView に触れない。でないと、
-    // 奪われた後の古い View がレイアウトされるたびに、今は別の View が表示している
-    // 広告のフレームを書き換えてしまう。
+    // Don't touch the AdView if ownership has been lost (taken by another View). Otherwise,
+    // every time the old View that lost ownership gets laid out, it would overwrite the frame
+    // of the ad that's now being displayed by a different View.
     val ad = currentAd ?: return
     if (ad.currentAttachment !== this) return
     val view = ad.adView ?: return

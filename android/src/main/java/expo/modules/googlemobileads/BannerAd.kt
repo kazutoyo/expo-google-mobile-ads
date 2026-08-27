@@ -22,33 +22,33 @@ private val mainHandler = Handler(Looper.getMainLooper())
 private const val TAG = "ExpoGoogleMobileAds"
 
 /**
- * `size` に数値の width/height が含まれていない場合のエラー。iOS 版の
- * `InvalidBannerSizeException` と同じ考え方: 設定ミスを `?: 0` で 0x0 のバナーへ静かに
- * 縮退させず、呼び出し側に例外として伝える。
+ * Thrown when `size` doesn't contain numeric width/height. Same idea as iOS's
+ * `InvalidBannerSizeException`: don't silently degrade a configuration mistake to a 0x0
+ * banner via `?: 0` — surface it to the caller as an exception.
  */
 class InvalidBannerSizeException :
-  CodedException(message = "BannerAd の size には数値の width と height が必要です")
+  CodedException(message = "BannerAd's size requires numeric width and height")
 
 /**
- * [Review fix — I4] `status`/`error`/`loadedSize`/`responseInfo` を1つの不変スナップショット
- * にまとめ、単一の `@Volatile` 参照で公開する。個別に `@Volatile` を付けるだけでは
- * 「フィールドごとの可視性」は保証されても「複数フィールドの組」の一貫性は保証されない。
+ * [Review fix — I4] Bundles `status`/`error`/`loadedSize`/`responseInfo` into a single
+ * immutable snapshot exposed through one `@Volatile` reference. Marking each field
+ * `@Volatile` individually would guarantee per-field visibility, but not consistency across
+ * the group of fields read together.
  *
- * [Review fix round 2 — item 5,保証範囲の訂正]
- * これが保証するのは「ネイティブ側の**1回の読み取り**内での一貫性」だけである
- * （例: `emitStatusChange()` は `state` を1度だけローカル変数に読み、その1つの
- * スナップショットから `status`/`error` を組み立てるので、そのイベントペイロード内では
- * 必ず一致した組が送られる）。JS 側は `ad.status` と `ad.error` を Expo の
- * `Property` 経由で**別々の呼び出し**として読むため、2つの呼び出しの間に
- * ネイティブ側の書き込みが挟まれば `{status: "error", error: null}` のような
- * 不一致は依然として観測しうる。これは iOS 側とも同じ制約であり、この変更による
- * 退行ではない。[Review fix round 3 — item 5, 参照先の訂正] iOS はこれらの
- * getter を `runOnMain`（メインスレッドへの直列化）ではなく `NSLock`
- * （`ios/BannerAd.swift` の `stateLock`）でデータ競合だけを閉じている。
- * ただし `status`/`error`/`loadedSize`/`responseInfo` は各 getter が個別に
- * lock/unlock する独立したプロパティであり、複数プロパティをまたいだ
- * atomic な読み取りを提供するものではない — つまり iOS 側も「2回の呼び出しの
- * 間に書き込みが挟まれば不一致を観測しうる」という同じ制約を持っている。
+ * [Review fix round 2 — item 5, correcting the guarantee]
+ * What this guarantees is consistency only **within a single read** on the native side (e.g.
+ * `emitStatusChange()` reads `state` into a local variable exactly once, and builds
+ * `status`/`error` from that one snapshot, so within a single event payload the pair is
+ * always consistent). The JS side reads `ad.status` and `ad.error` as **separate calls**
+ * through Expo's `Property` mechanism, so a native-side write landing between those two calls
+ * can still produce an inconsistent pair like `{status: "error", error: null}`. This is the
+ * same constraint iOS has, and is not a regression introduced by this change.
+ * [Review fix round 3 — item 5, correcting the reference] iOS closes only the data race on
+ * these getters with an `NSLock` (`ios/BannerAd.swift`'s `stateLock`), not by serializing onto
+ * the main thread via `runOnMain`. However, `status`/`error`/`loadedSize`/`responseInfo` are
+ * each independent properties whose getters lock/unlock individually — it does not provide an
+ * atomic read across multiple properties. In other words, iOS carries the exact same
+ * constraint: a write landing between two calls can still produce an inconsistent pair.
  */
 private data class LoadState(
   val status: String,
@@ -58,14 +58,16 @@ private data class LoadState(
 )
 
 /**
- * ビュー階層に入れずに保持・ロードできる広告インスタンス。`BannerAdView` がマウント時に
- * `adView` を addView し、アンマウント時は removeView するだけ — 破棄はしない。
- * これにより画面遷移をまたいで再利用できる（ライブラリの中心的な前提）。
+ * An ad instance that can be held and loaded without being placed in the view hierarchy.
+ * `BannerAdView` addViews `adView` on mount and only removeViews on unmount — it never
+ * destroys it, which is what lets it survive across screen transitions (a core assumption of
+ * this library).
  *
- * 検証済みの方式1（Task 0 で API 36 エミュレータ上で確認）: 一度も window に addView
- * されていない `AdView` でも `loadAd()` は成功し、後から addView しても再ロードなしで
- * 正しく表示される。そのため `BannerAd.load(request, callback)`（非推奨の静的 API）は
- * 使わず、`AdView` インスタンスを保持して `AdView.loadAd()` を呼ぶ。
+ * Confirmed approach 1 (verified on an API 36 emulator in Task 0): `loadAd()` succeeds even
+ * on an `AdView` that has never been addView'd to a window, and addView'ing it later displays
+ * it correctly with no reload needed. That's why this holds onto an `AdView` instance and
+ * calls `AdView.loadAd()`, rather than using the deprecated static `BannerAd.load(request,
+ * callback)` API.
  */
 class BannerAd(
   appContext: AppContext,
@@ -78,35 +80,33 @@ class BannerAd(
     mapOf("width" to requestedSize.width, "height" to requestedSize.height)
 
   /**
-   * ビュー階層に入れずに保持する。表示時に `BannerAdView` が addView する。
-   * `load()`（main スレッドの Runnable）と `sharedObjectDidRelease()`（release() を
-   * 呼んだ任意のスレッド、典型的には JS スレッド）の両方から読み書きされるため `@Volatile`。
+   * Held without being placed in the view hierarchy. `BannerAdView` addViews it when
+   * displaying. `@Volatile` because it's read/written both from `load()` (a main-thread
+   * Runnable) and `sharedObjectDidRelease()` (whichever thread called release(), typically
+   * the JS thread).
    */
   @Volatile
   var adView: AdView? = null
     private set
 
   /**
-   * 現在この広告を表示している `BannerAdView`。所有権の判定に使う（Lesson 5）。
-   * 読み書きは常に `BannerAdView` のメソッド経由で、それらは常に UI スレッドから
-   * 呼ばれる（Expo/RN の View prop 適用・ライフサイクルコールバックは UI スレッド固定）
-   * ため `@Volatile` は不要。
+   * The `BannerAdView` currently displaying this ad. Used to decide ownership (Lesson 5).
+   * Always read/written through `BannerAdView`'s methods, which are always called from the
+   * UI thread (Expo/RN's View prop application and lifecycle callbacks are always on the UI
+   * thread), so `@Volatile` isn't needed here.
    *
-   * [Review fix round 2 — item 3 → round 3 で revert]
-   * 一時 `WeakReference` 化したが、レビューで「no-op」と指摘され、その通りだった:
-   * `BannerAd.adView`（強参照）が指す `AdView` の `View.mParent`
-   * （`ViewGroup.addViewInner` が設定する、ただの強参照フィールド）は
-   * `removeView` されない限り window detach では絶対にクリアされない。
-   * このライブラリで `currentAttachment` の参照先は常に `adView.parent` と同一の
-   * `BannerAdView` を指しており、弱参照にしたところで `BannerAd → adView →
-   * (mParent) → BannerAdView` という強参照の経路がそのまま生き続けるため、GC で
-   * `currentAttachmentRef.get()` が null になることは実質無い（リーク削減量ゼロ、
-   * 間接参照だけが増える）。本当の解決策は「参照を弱くする」ことではなく
-   * 「決定的なタイミングで `removeView` する」ことであり、それは
-   * `ExpoGoogleMobileAdsModule.kt` の `OnViewDestroys` フック
-   * （`BannerAdView.detachIfOwned()` を呼ぶ）で対応した。そちらで `mParent` が
-   * 実際に null 化される以上、ここを弱参照のままにしておく理由も無いので単純な
-   * 強参照に戻した。
+   * [Review fix round 2 — item 3 → reverted in round 3]
+   * This was briefly made a `WeakReference`, but review correctly pointed out it was a no-op:
+   * the `AdView` that `BannerAd.adView` (a strong reference) points to has a `View.mParent`
+   * (set by `ViewGroup.addViewInner`, a plain strong-reference field) that is never cleared by
+   * a window detach unless `removeView` is called. In this library, `currentAttachment` always
+   * points to the same `BannerAdView` as `adView.parent`, so weakening the reference wouldn't
+   * let `currentAttachmentRef.get()` become null via GC in practice (zero reduction in leaks,
+   * just an extra layer of indirection). The real fix isn't "weaken the reference" but
+   * "`removeView` at a deterministic time", which is what the `OnViewDestroys` hook in
+   * `ExpoGoogleMobileAdsModule.kt` (calling `BannerAdView.detachIfOwned()`) handles. Since
+   * `mParent` is actually nulled out there, there's no reason to keep this weak, so it's back
+   * to a plain strong reference.
    */
   var currentAttachment: BannerAdView? = null
 
@@ -128,16 +128,16 @@ class BannerAd(
   var previousAttachment: WeakReference<BannerAdView>? = null
 
   /**
-   * `sharedObjectDidRelease()` によるテアダウンが済んだかどうか。true になったら
-   * 二度と `AdView` を作り直さない。release() を呼んだスレッド（書き込み）と
-   * main スレッドの `load()`（読み取り）の両方から触れるため `@Volatile`。
+   * Whether teardown by `sharedObjectDidRelease()` has completed. Once true, a new `AdView`
+   * is never created again. `@Volatile` because it's touched both by whichever thread calls
+   * release() (write) and by `load()` on the main thread (read).
    */
   @Volatile
   private var isReleased = false
 
-  // [Review fix — I4] 4フィールドをまとめた LoadState を単一の @Volatile 参照で公開する。
-  // GMA のコールバック（main スレッド）から書き込まれ、JS 側の Property getter
-  // （JS スレッド）から読み取られる（Lesson 6: データ競合）。
+  // [Review fix — I4] Exposes the 4 fields bundled as LoadState through a single @Volatile
+  // reference. Written from GMA callbacks (main thread) and read from the JS-side Property
+  // getter (JS thread) — a data race (Lesson 6).
   @Volatile
   private var state = LoadState(status = "loading", error = null, loadedSize = null, responseInfo = null)
 
@@ -147,17 +147,17 @@ class BannerAd(
   val responseInfo: Map<String, Any?>? get() = state.responseInfo
 
   /**
-   * [Review fix — I1] `load()` を待たずに `BannerAdView` が先にマウントされた場合でも、
-   * その時点で Activity が解決できるなら `AdView` を作る（iOS が `setAd` 内で遅延生成する
-   * のと同じ設計）。`load()` と `BannerAdView.setAd()` の両方から呼ばれるが、どちらも
-   * 呼び出しは常に UI スレッド上（`load()` は main に post 済み、`setAd` は Fabric の
-   * prop 適用で常に UI スレッド）なので、生成自体に追加の同期は不要。
+   * [Review fix — I1] Creates the `AdView` as soon as the Activity can be resolved, even if
+   * `BannerAdView` mounts before `load()` runs (the same design as iOS's lazy creation inside
+   * `setAd`). Called from both `load()` and `BannerAdView.setAd()`, but both calls always
+   * happen on the UI thread (`load()` is already posted to main; `setAd` is always on the UI
+   * thread via Fabric's prop application), so creation itself needs no extra synchronization.
    *
-   * `BannerAdView` は React Native の実 View としてしか存在し得ず、mount される時点で
-   * 必ずそれをホストする Activity が既に存在する（そうでなければ描画先の window が無い）。
-   * そのため実際には `setAd()` からの呼び出しで Activity が取れないケースはほぼ起こらない
-   * — 起こり得るのは「プリロードしたが `load()` がまだ main の Runnable を消化していない」
-   * ようなごく短い窓のみで、`setAd` 側の呼び出しがそれも埋める。
+   * `BannerAdView` can only exist as a real React Native view, and by the time it's mounted
+   * the Activity hosting it must already exist (otherwise there'd be no window to draw into).
+   * So in practice a call from `setAd()` failing to get an Activity essentially never happens
+   * — the only real window is "preloaded, but `load()`'s main Runnable hasn't run yet",
+   * which `setAd`'s own call covers too.
    */
   internal fun ensureAdView(): AdView? {
     if (isReleased) return null
@@ -167,31 +167,32 @@ class BannerAd(
   }
 
   /**
-   * [Lesson 1 の Android 版 — スレッドアフィニティ]
-   * `AdView`（`FrameLayout` のサブクラス）の生成・`loadAd()` は UI スレッド専用の操作。
-   * Looper を持たないスレッド（JS スレッドなど）で `View` を生成すると内部の `Handler`
-   * 生成などでクラッシュしうる。一方 JS 側の `Function("load")` は同期関数として
-   * JS スレッドから呼ばれる。`load()` は戻り値を必要としないため、JS スレッドを
-   * ブロックしてまで main の完了を待つ理由が無く、非同期 post で十分
-   * （iOS 最新版が `DispatchQueue.main.sync` から `DispatchQueue.main.async` に
-   * 直した判断と同じ）。
+   * [Android counterpart of Lesson 1 — thread affinity]
+   * Creating an `AdView` (a `FrameLayout` subclass) and calling `loadAd()` are UI-thread-only
+   * operations. Creating a `View` on a thread with no Looper (like the JS thread) can crash,
+   * e.g. while creating an internal `Handler`. Meanwhile the JS-side `Function("load")` is
+   * called synchronously from the JS thread. Since `load()` has no return value, there's no
+   * reason to block the JS thread waiting for main to finish — an async post is enough (the
+   * same call the latest iOS version made, switching from `DispatchQueue.main.sync` to
+   * `DispatchQueue.main.async`).
    */
   fun load() {
     mainHandler.post {
       if (isReleased) {
-        // release() 済み。もう表示するものが無いので何もしない。
+        // Already release()d. Nothing left to show, so do nothing.
         return@post
       }
 
-      // [Lesson 4 の Android 版] rootViewController 相当。ensureAdView() が
-      // `appContext?.currentActivity` を毎回解決し直すので、init 時に固定した Activity が
-      // プリロード時に存在しないまま二度と復帰できなくなる、ということが起きない。
+      // [Android counterpart of Lesson 4] Equivalent to rootViewController. Since
+      // `ensureAdView()` re-resolves `appContext?.currentActivity` every time, an Activity
+      // fixed at init time (which may not exist yet during preload) can never come back once
+      // it's gone stale.
       val view = ensureAdView()
       if (view == null) {
         setError(
-          "表示可能な Activity が見つからないため広告をロードできませんでした。" +
-            "アプリの起動が完了してから、または BannerAdView をマウントしてから " +
-            "load() を呼び直してください。"
+          "Could not load the ad because no visible Activity was found. " +
+            "Try again after the app finishes launching, or after BannerAdView has mounted, and " +
+            "call load() again."
         )
         return@post
       }
@@ -215,13 +216,13 @@ class BannerAd(
   }
 
   /**
-   * [Review fix — C2] 初回ロード成功時と自動更新（refresh）成功時の共通処理。
-   * Next-Gen SDK の自動更新は「同じ `GmaBannerAd` インスタンスを更新する」のではなく
-   * 「新しい `GmaBannerAd` インスタンスに差し替える」ため、`adEventCallback` と
-   * `bannerAdRefreshCallback` は都度その新しいインスタンスへ再バインドしないと、
-   * 1回目の refresh 以降 impression/clicked/paid が二度と飛ばなくなり、
-   * 2回目以降の refresh 通知も受け取れなくなる（`onAdRefreshed()` はコールバック引数を
-   * 持たないため、最新のインスタンスは `AdView.getBannerAd()` から取り直す）。
+   * [Review fix — C2] Common handling for both an initial successful load and a successful
+   * auto-refresh. The Next-Gen SDK's auto-refresh doesn't "update the same `GmaBannerAd`
+   * instance" — it "swaps in a new `GmaBannerAd` instance" — so `adEventCallback` and
+   * `bannerAdRefreshCallback` must be rebound to that new instance every time. Otherwise,
+   * after the first refresh, impression/clicked/paid events would never fire again, and
+   * subsequent refresh notifications would also stop arriving (`onAdRefreshed()` takes no
+   * callback argument, so the latest instance must be re-fetched from `AdView.getBannerAd()`).
    */
   private fun onAdReady(ad: GmaBannerAd) {
     val size = ad.getAdSize()
@@ -248,25 +249,25 @@ class BannerAd(
 
     ad.bannerAdRefreshCallback = object : BannerAdRefreshCallback {
       override fun onAdRefreshed() {
-        // [Review fix round 2 — item 2 → round 3 で訂正]
-        // 以前はここで null のとき `setError()` を呼んでいたが、それは JS に嘘を伝える
-        // ことになる: このタイミングでは直前にロードに成功していたバナーがまだ画面に
-        // 表示され続けており、何一つ壊れていない。`status: "error"` にすると
-        // `useBannerAdState`/`{isLoaded && <BannerAdView/>}` パターンが正常に動いている
-        // バナーを unmount してしまい、しかも `adEventCallback`/`bannerAdRefreshCallback`
-        // を再バインドする手段がもう無いのでその後は二度と復帰できない。かつ iOS には
-        // 対応する分岐が無く、Android だけが作り出す合成エラーになってしまう。
-        // 「更新が止まった」は劣化であって失敗ではないので、状態は一切変更せず
-        // ログにだけ残す（起こり得ないはずの経路 — `onAdRefreshed()` が呼ばれた直後なら
-        // `adView` は必ず新しい広告を保持しているはず — の診断用）。
+        // [Review fix round 2 — item 2 → corrected in round 3]
+        // This used to call `setError()` when null here, but that lies to JS: at this point
+        // the banner that loaded successfully just before is still on screen — nothing is
+        // actually broken. Setting `status: "error"` would make the
+        // `useBannerAdState`/`{isLoaded && <BannerAdView/>}` pattern unmount a banner that's
+        // working fine, and there's no longer a way to rebind `adEventCallback`/
+        // `bannerAdRefreshCallback`, so it could never recover afterward. iOS also has no
+        // corresponding branch, so this would be an Android-only synthetic error. "Refresh
+        // stopped" is a degradation, not a failure, so leave the state untouched entirely and
+        // only log it (for diagnosing a path that shouldn't be reachable — right after
+        // `onAdRefreshed()` fires, `adView` should always hold a new ad).
         val refreshed = adView?.getBannerAd()
         if (refreshed != null) {
           onAdReady(refreshed)
         } else {
           Log.w(
             TAG,
-            "広告の自動更新(refresh)後に AdView.getBannerAd() が null を返しました。" +
-              "以後の自動更新イベントは届かなくなりますが、現在表示中のバナーはそのまま有効です。"
+            "AdView.getBannerAd() returned null after an ad auto-refresh. " +
+              "Further auto-refresh events won't arrive, but the currently displayed banner remains valid."
           )
         }
       }
@@ -283,8 +284,8 @@ class BannerAd(
   }
 
   private fun setError(message: String) {
-    // [Review fix — Minor] iOS 側と表記を揃える（"expo-google-mobile-ads" ではなく
-    // iOS の resolveRootViewController() 失敗時と同じ "ExpoGoogleMobileAds"）。
+    // [Review fix — Minor] Aligned wording with iOS ("ExpoGoogleMobileAds", matching iOS's
+    // resolveRootViewController() failure, rather than "expo-google-mobile-ads").
     state = state.copy(status = "error", error = mapOf("code" to -1, "message" to message, "domain" to "ExpoGoogleMobileAds"))
     emitStatusChange()
   }
@@ -295,41 +296,41 @@ class BannerAd(
   }
 
   /**
-   * [Lesson 3 の Android 版 — release は実際にテアダウンしなければならない]
-   * `release()` は JS との結びつきを切るだけでネイティブ側の後始末はしてくれないため、
-   * ここで View から外し、破棄する。[Review fix — Minor] 併せて `adEventCallback` と
-   * `currentAttachment` もクリアする（`AdView` 自体は破棄されるので実害は小さいが、
-   * 破棄後のコールバック参照や所有権情報を残さない）。
+   * [Android counterpart of Lesson 3 — release must actually tear things down]
+   * `release()` only severs the link to JS and does no native-side cleanup on its own, so
+   * here we remove it from its view and destroy it. [Review fix — Minor] Also clears
+   * `adEventCallback` and `currentAttachment` (the `AdView` itself is destroyed anyway so the
+   * actual harm is small, but this avoids leaving stale callback references or ownership
+   * info behind after teardown).
    *
-   * [Lesson 2 の Android 版 — ロックを保持したまま別スレッドを待たない]
-   * iOS では `sharedObjectWillRelease()` がレジストリの mutex を保持したまま呼ばれるため
-   * `DispatchQueue.main.sync` はデッドロックしうる、という制約があった。
-   * `SharedObjectRegistry.kt`（expo-modules-core Android, `delete(id)`）を実際に読んだところ、
-   * `synchronized(this) { pairs.remove(id) }` という synchronized ブロックが完了して
-   * ロックを解放した*後*に `.let { it.sharedObjectDidRelease() }` を呼んでおり、
-   * Android では `sharedObjectDidRelease()` の実行中にレジストリのロックは保持されて
-   * いない（iOS とは実装が異なる）。とはいえ `release()` 自体は任意のスレッド
-   * （典型的には JS スレッド）から同期的に呼ばれるため、わざわざそのスレッドを塞いで
-   * main の完了を待つ理由が無く、iOS 版と同じく非同期 post に留めた。
+   * [Android counterpart of Lesson 2 — don't wait on another thread while holding a lock]
+   * On iOS, `sharedObjectWillRelease()` is called while holding the registry's mutex, which
+   * is why `DispatchQueue.main.sync` there can deadlock. Actually reading
+   * `SharedObjectRegistry.kt` (expo-modules-core Android, `delete(id)`) shows a
+   * `synchronized(this) { pairs.remove(id) }` block that finishes and releases the lock
+   * *before* calling `.let { it.sharedObjectDidRelease() }` — on Android the registry lock is
+   * not held while `sharedObjectDidRelease()` runs (a different implementation from iOS).
+   * That said, `release()` itself is still called synchronously from an arbitrary thread
+   * (typically the JS thread), so there's no reason to block that thread waiting for main to
+   * finish — kept as an async post, same as the iOS version.
    */
   override fun sharedObjectDidRelease() {
     isReleased = true
-    // [Review fix round 2 — item 4, round 3 で landmine を修正]
-    // `currentAttachment` は UI スレッド専用のフィールド（上のコメント参照）だが、
-    // `sharedObjectDidRelease()` 自体は release() を呼んだ任意のスレッド（典型的には
-    // JS スレッド）から呼ばれるため、他の後始末と同じく main への post の中で書く。
-    // 以前は `val view = adView ?: return` を先に評価していたため、`adView` が
-    // まだ無い（＝一度も `load()`/`ensureAdView()` が成功していない）まま release()
-    // された場合に post 自体が発火せず `currentAttachment` のクリアも一緒に
-    // スキップされる不発弾になっていた（今のところ実際には起こり得ない — `adView` が
-    // 無ければ `currentAttachment` も設定されていないため実害は無かったが、直しておく）。
-    // `adView` の null チェックは post の中に移し、`currentAttachment` のクリアは
-    // 常に実行されるようにした。
+    // [Review fix round 2 — item 4, fixing a landmine in round 3]
+    // `currentAttachment` is a UI-thread-only field (see the comment above), but
+    // `sharedObjectDidRelease()` itself is called from whichever thread called release()
+    // (typically the JS thread), so like the rest of teardown it's written inside the post to
+    // main. This used to evaluate `val view = adView ?: return` first, so if release() was
+    // called while `adView` was still unset (i.e. `load()`/`ensureAdView()` had never
+    // succeeded), the post itself would never fire and clearing `currentAttachment` would be
+    // skipped along with it — a dud (in practice harmless so far, since `currentAttachment`
+    // is never set without `adView` either, but worth fixing anyway). The `adView` null check
+    // has been moved inside the post, and clearing `currentAttachment` now always runs.
     mainHandler.post {
       currentAttachment = null
       previousAttachment = null
       val view = adView ?: return@post
-      // bannerAdRefreshCallback も adEventCallback と一緒にクリアする。
+      // Clear bannerAdRefreshCallback along with adEventCallback.
       view.getBannerAd()?.let {
         it.adEventCallback = null
         it.bannerAdRefreshCallback = null
@@ -348,6 +349,7 @@ private fun BannerAdRequest.Builder.applyRequestOptions(
     (keyword as? String)?.let { addKeyword(it) }
   }
   (options["contentUrl"] as? String)?.let { setContentUrl(it) }
-  // networkExtras は意図的に未対応（JS 側の RequestOptions 型からも意図的に外されている）。
+  // networkExtras is deliberately unsupported (also deliberately excluded from the JS-side
+  // RequestOptions type).
   return this
 }

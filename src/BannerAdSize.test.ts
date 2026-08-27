@@ -18,34 +18,34 @@ const mockNative = NativeModule as jest.Mocked<typeof NativeModule>;
 
 beforeEach(() => jest.clearAllMocks());
 
-describe('固定サイズ', () => {
-  it('MMA バナーは 320x50', () => {
+describe('fixed sizes', () => {
+  it('BANNER is 320x50', () => {
     expect(BannerAdSize.BANNER).toEqual({ width: 320, height: 50 });
   });
 
-  it('ミディアムレクタングルは 300x250', () => {
+  it('MEDIUM_RECTANGLE is 300x250', () => {
     expect(BannerAdSize.MEDIUM_RECTANGLE).toEqual({ width: 300, height: 250 });
   });
 });
 
 describe('anchoredAdaptive', () => {
-  it('width 省略時は画面幅を使う', () => {
+  it('uses the screen width when width is omitted', () => {
     BannerAdSize.anchoredAdaptive();
     expect(mockNative.getAnchoredAdaptiveSize).toHaveBeenCalledWith(390, 'current');
   });
 
-  it('width と orientation を指定できる', () => {
+  it('accepts width and orientation', () => {
     BannerAdSize.anchoredAdaptive({ width: 360, orientation: 'portrait' });
     expect(mockNative.getAnchoredAdaptiveSize).toHaveBeenCalledWith(360, 'portrait');
   });
 
-  it('ネイティブが返したサイズをそのまま返す', () => {
+  it('returns whatever size native returns, unchanged', () => {
     expect(BannerAdSize.anchoredAdaptive()).toEqual({ width: 360, height: 50 });
   });
 });
 
 describe('largeAnchoredAdaptive', () => {
-  it('large 用のネイティブ関数を呼ぶ', () => {
+  it('calls the native function for the large variant', () => {
     BannerAdSize.largeAnchoredAdaptive({ width: 360 });
     expect(mockNative.getLargeAnchoredAdaptiveSize).toHaveBeenCalledWith(360, 'current');
     expect(mockNative.getAnchoredAdaptiveSize).not.toHaveBeenCalled();
@@ -53,19 +53,19 @@ describe('largeAnchoredAdaptive', () => {
 });
 
 describe('inlineAdaptive', () => {
-  it('maxHeight 省略時は null を渡す', () => {
+  it('passes null when maxHeight is omitted', () => {
     BannerAdSize.inlineAdaptive({ width: 360 });
     expect(mockNative.getInlineAdaptiveSize).toHaveBeenCalledWith(360, null, 'current');
   });
 
-  it('maxHeight を指定できる', () => {
+  it('accepts maxHeight', () => {
     BannerAdSize.inlineAdaptive({ width: 360, maxHeight: 200 });
     expect(mockNative.getInlineAdaptiveSize).toHaveBeenCalledWith(360, 200, 'current');
   });
 });
 
 describe('resolve', () => {
-  it('type に応じて振り分ける', () => {
+  it('dispatches based on type', () => {
     BannerAdSize.resolve({ type: 'largeAnchoredAdaptive', width: 360 });
     expect(mockNative.getLargeAnchoredAdaptiveSize).toHaveBeenCalledWith(360, 'current');
 

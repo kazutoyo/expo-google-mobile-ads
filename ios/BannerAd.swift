@@ -2,60 +2,66 @@ import ExpoModulesCore
 import GoogleMobileAds
 import UIKit
 
-/// メインスレッド上ならそのまま実行し、そうでなければ `DispatchQueue.main.sync` で
-/// メインスレッドへ同期的にホップしてから実行する。
+/// Runs synchronously on the main thread if already there; otherwise hops to the main
+/// thread synchronously via `DispatchQueue.main.sync` before running.
 ///
-/// UIKit と GoogleMobileAds のほとんどの API はメインスレッド専用（`GADAdSize.h` の
-/// アダプティブサイズ関数群には "This function must be called on the main queue." と明記
-/// されている）。一方、Expo Modules の `Constructor` / `Function` / `Property` はどのスレッドで
-/// 呼ばれるか保証されない（`AsyncFunction` の既定キューもメインではない）ため、UIKit/GMA に
-/// 触れる箇所はこの関数でメインスレッドへ同期させる。
+/// Most UIKit and GoogleMobileAds APIs are main-thread-only (`GADAdSize.h`'s adaptive size
+/// functions explicitly say "This function must be called on the main queue."). Meanwhile,
+/// Expo Modules' `Constructor` / `Function` / `Property` bodies can run on any thread (even
+/// `AsyncFunction`'s default queue isn't main), so any code touching UIKit/GMA is synced to
+/// the main thread through this function.
 ///
-/// **残っているリスク（正直に書く）**: React Native の New Architecture には、メインスレッドが
-/// JS ランタイムに対して同期的に割り込む経路が実在する
-/// （`AppleEventBeat::activityDidChange` → `EventBeat::induce()` →
-/// `RuntimeScheduler::executeNowOnTheSameThread`、`EventBeat.cpp` 自身が
-/// "Both JS and UI thread are blocked" とコメントしている。`experimental_flushSync` や
-/// サードパーティ製ライブラリ経由で到達しうる）。同期の `Function`/`Property` の本体は
-/// **JS ランタイムを保持したまま** JS スレッド上で実行されるため、そこで `main.sync` を呼んで
-/// いる最中に main がまさにこの経路で同じ JS ランタイムへ同期的に割り込もうとすれば、
-/// 双方が相手を待つ形になり得る。つまり「main.sync を使っている箇所はロックを持たれていない
-/// から安全」と言い切ることはできない —— これは同期的な main ホップを提供する API 全般に
-/// 付随する原理的なリスクであり、`runOnMain` 固有の欠陥ではない。
+/// **The remaining risk (stated plainly)**: React Native's New Architecture has a real path
+/// where the main thread synchronously interrupts the JS runtime
+/// (`AppleEventBeat::activityDidChange` → `EventBeat::induce()` →
+/// `RuntimeScheduler::executeNowOnTheSameThread` — `EventBeat.cpp` itself comments
+/// "Both JS and UI thread are blocked". This can also be reached via `experimental_flushSync`
+/// or third-party libraries). A synchronous `Function`/`Property` body runs on the JS thread
+/// **while holding the JS runtime**, so if main tries to synchronously interrupt that same
+/// runtime through this path while we're in the middle of calling `main.sync` there, both
+/// sides end up waiting on each other. In other words, you cannot claim "call sites using
+/// `main.sync` are safe because no lock is held" — this is an inherent risk of any API that
+/// offers a synchronous main-thread hop, not a defect specific to `runOnMain`.
 ///
-/// そのためこの `runOnMain`（＝ブロッキングな `main.sync`）を使う箇所は最小限に絞ってある。
-/// `ios/` 全体を grep した時点で、`runOnMain` の呼び出し元は次の 4 箇所（この関数の定義を
-/// 除く）だけである。それぞれ「なぜ非同期にできないのか」を、根拠を持って書ける範囲でだけ書く。
+/// For that reason, call sites for this `runOnMain` (i.e. the blocking `main.sync`) are kept
+/// to a minimum. Grepping all of `ios/`, there are exactly 4 call sites (excluding this
+/// function's own definition). For each, here's why it can't be made asynchronous, stated
+/// only to the extent it can be backed up:
 ///
-/// 1. `ExpoGoogleMobileAdsModule.swift` の `getAnchoredAdaptiveSize` /
-///    `getLargeAnchoredAdaptiveSize` / `getInlineAdaptiveSize`（3 箇所）。
-///    JS API 上あえて同期関数にしている（呼び出し側がロード前にレイアウトを確定させるための
-///    設計）ため非同期化できず、かつ `GADAdSize.h` がメインスレッド専用と明記しているため、
-///    同期のまま main へ寄せる以外に手が無い。**JS スレッドが JS ランタイムを保持したまま
-///    `main.sync` に到達しうるのは、この 3 箇所だけ**である（残る 1 箇所は下記のとおり
-///    呼び出し元が全てメインスレッド上なので sync 分岐に入らない）。つまり上記の残存リスクを
-///    実際に負っているのはここだけであり、承知の上で意図的に残している。受け入れる理由は、
-///    この呼び出しが短く・純粋な数値計算だけで・JS へ再入することが無いため。
-/// 2. `bannerView`（下記の遅延生成プロパティ）。`BannerView?` を返す必要があるので
-///    `DispatchQueue.main.async` にはできない。grep で確認した呼び出し元は `load()` の
-///    `DispatchQueue.main.async` ブロック（1 箇所）と `BannerAdView` の `setAd` /
-///    `detachCurrentAdIfOwned` / `layoutSubviews` だけで、いずれも既にメインスレッド上にいる
-///    （`ExpoView = ExpoFabricView` が `@MainActor` であることは
-///    `ExpoModulesCore.swiftinterface` で確認した）。したがって実際には
-///    `Thread.isMainThread` の早期リターン分岐しか実行されない。
-///    （`sharedObjectWillRelease` はこのプロパティではなく `_bannerView` を直接読んでいる。）
+/// 1. `getAnchoredAdaptiveSize` / `getLargeAnchoredAdaptiveSize` / `getInlineAdaptiveSize` in
+///    `ExpoGoogleMobileAdsModule.swift` (3 call sites). These are deliberately synchronous in
+///    the JS API (by design, so the caller can finalize layout before the ad loads), so they
+///    can't be made async, and `GADAdSize.h` explicitly documents them as main-thread-only,
+///    so hopping to main while staying synchronous is the only option. **These 3 are the only
+///    places where the JS thread can reach `main.sync` while still holding the JS runtime**
+///    (the remaining call site below never takes the sync branch, because its callers are
+///    already all on the main thread). So this is the only place actually carrying the
+///    residual risk described above, and it's kept deliberately, with full awareness. The
+///    reason it's acceptable: this call is short, pure numeric computation, and never
+///    re-enters JS.
+/// 2. `bannerView` (the lazy property below). It has to return a `BannerView?`, so it can't
+///    be `DispatchQueue.main.async`. Grep confirms its only callers are the
+///    `DispatchQueue.main.async` block inside `load()` (1 site) and `BannerAdView`'s `setAd` /
+///    `detachCurrentAdIfOwned` / `layoutSubviews` — all of which are already on the main
+///    thread (`ExpoView = ExpoFabricView` being `@MainActor` was confirmed against
+///    `ExpoModulesCore.swiftinterface`). So in practice only the `Thread.isMainThread`
+///    early-return branch ever executes.
+///    (`sharedObjectWillRelease` reads `_bannerView` directly rather than through this
+///    property.)
 ///
-/// なお `main.sync` を書いてよい場所とそうでない場所の区別は「呼び出し元がロックを持っているか」
-/// では**ない**（JS ランタイム自体が競合資源なので、そのような安全性の主張はできない）。
-/// ロックを保持したまま呼ばれることが分かっている `sharedObjectWillRelease()` のようなパスは
-/// デッドロック確率が跳ね上がるので論外、というだけである（そちらは `DispatchQueue.main.async`。
-/// 詳細はそのメソッドのコメントを参照）。
+/// Note that the line between where `main.sync` is fine and where it isn't is **not** "does
+/// the caller hold a lock" (the JS runtime itself is the contended resource, so that kind of
+/// safety claim can't be made here). A path known to be called while holding a lock, like
+/// `sharedObjectWillRelease()`, is simply out of the question because it multiplies the odds
+/// of a deadlock — that one uses `DispatchQueue.main.async` instead. See that method's own
+/// comment for details.
 ///
-/// この方針で `main.sync` を外した箇所:
-/// - `status`/`error`/`loadedSize`/`responseInfo` の読み取り（JS の render のたびに走るホット
-///   パス）→ main を奪い合わない `NSLock` に置き換え、データ競合だけを閉じている。
-/// - `load()` と `setRequestConfiguration`（`ExpoGoogleMobileAdsModule.swift`）→ どちらも戻り値の
-///   無い同期 `Function` なので `DispatchQueue.main.async` で足りる。
+/// Places where `main.sync` was deliberately removed under this policy:
+/// - Reads of `status`/`error`/`loadedSize`/`responseInfo` (a hot path that runs on every JS
+///   render) → replaced with an `NSLock` that doesn't contend for main, closing only the data
+///   race.
+/// - `load()` and `setRequestConfiguration` (`ExpoGoogleMobileAdsModule.swift`) → both are
+///   synchronous `Function`s with no return value, so `DispatchQueue.main.async` is enough.
 func runOnMain<T>(_ block: () -> T) -> T {
   if Thread.isMainThread {
     return block()
@@ -63,42 +69,45 @@ func runOnMain<T>(_ block: () -> T) -> T {
   return DispatchQueue.main.sync(execute: block)
 }
 
-/// `size` に数値の `width`/`height` が含まれていない場合のエラー。
-/// 以前は `?? 0` で 0×0 のバナーへ静かに縮退していたが、設定ミスは呼び出し側に
-/// 例外として伝えるべき（0×0 は原因の分からない「広告が表示されない」バグにしかならない）。
+/// Thrown when `size` doesn't contain numeric `width`/`height`.
+/// This used to silently degrade to a 0×0 banner via `?? 0`, but a configuration mistake
+/// should be surfaced to the caller as an exception (a 0×0 banner is just an unexplainable
+/// "the ad doesn't show up" bug).
 final class InvalidBannerSizeException: Exception, @unchecked Sendable {
   override var reason: String {
-    "BannerAd の size には数値の width と height が必要です"
+    "BannerAd's size requires numeric width and height"
   }
 }
 
-/// ビュー階層に入れずに保持・ロードできる広告インスタンス。
-/// `BannerAdView` がマウント時に `bannerView` を addSubview し、アンマウント時は
-/// removeFromSuperview するだけ — 破棄はしない。これにより画面遷移をまたいで再利用できる。
+/// An ad instance that can be held and loaded without being placed in the view hierarchy.
+/// `BannerAdView` addSubviews `bannerView` on mount and only removeFromSuperview on unmount —
+/// it never destroys it, which is what lets it survive across screen transitions.
 ///
-/// `SharedObject`（expo-modules-core）は `NSObject` を継承しない Swift クラスであるため、
-/// `NSObjectProtocol` を要求する ObjC プロトコルの `BannerViewDelegate` に直接は適合できない
-/// （`cannot declare conformance to 'NSObjectProtocol' in Swift` でビルドエラーになる）。
-/// そのため NSObject ベースの小さなプロキシ `BannerAdDelegateProxy` 経由でイベントを受け取る。
+/// `SharedObject` (expo-modules-core) is a Swift class that doesn't inherit from `NSObject`,
+/// so it cannot directly conform to `BannerViewDelegate`, an ObjC protocol that requires
+/// `NSObjectProtocol` (`cannot declare conformance to 'NSObjectProtocol' in Swift` is a build
+/// error). So events are received through a small NSObject-based proxy, `BannerAdDelegateProxy`,
+/// instead.
 final class BannerAd: SharedObject {
   private var _bannerView: BannerView?
 
-  /// `sharedObjectWillRelease()` によるテアダウンが済んだかどうか。true になったら
-  /// 二度と `GADBannerView` を作り直さない。メインスレッド上のコード（`runOnMain` の
-  /// 早期リターン経由、または `sharedObjectWillRelease` の `DispatchQueue.main.async`
-  /// ブロック）からしか読み書きしないので、`_bannerView` と同じく main 上で直列化される。
+  /// Whether teardown by `sharedObjectWillRelease()` has completed. Once true, a new
+  /// `GADBannerView` is never created again. Only read/written from code on the main thread
+  /// (either via `runOnMain`'s early-return path, or inside `sharedObjectWillRelease`'s
+  /// `DispatchQueue.main.async` block), so like `_bannerView` it's serialized on main.
   private var isReleased = false
 
-  /// ビュー階層に入れずに保持する。表示時に BannerAdView が addSubview する。
-  /// 破棄後（`release()` 済み）は `nil` を返し、二度と新しい `GADBannerView` を作らない
-  /// —— そうしないと、release 済みの ad をまだ保持している View が再度 props を
-  /// 受け取ったときに、空の（何もロードされていない）バナーを勝手に作り直して
-  /// マウントしてしまう。
+  /// Held without being placed in the view hierarchy. `BannerAdView` addSubviews it when
+  /// displaying. After teardown (post-`release()`), returns `nil` and never creates a new
+  /// `GADBannerView` again — otherwise a View that still holds a released ad, upon receiving
+  /// props again, would end up creating and mounting a fresh, empty (nothing-loaded) banner
+  /// on its own.
   ///
-  /// 遅延生成にしているのは、`GADBannerView` の生成・設定がメインスレッド専用の UIKit/GMA API
-  /// である一方、`Constructor` は JS へ同期的にオブジェクトを返す必要があり、初期化の中で
-  /// メインスレッドへ同期ホップするのは（JS スレッド=メインスレッドの環境やテスト環境も
-  /// 含めて）避けたいため。実際に必要になる `load()` / `BannerAdView` アタッチ時まで生成を遅らせる。
+  /// Lazily created because creating/configuring a `GADBannerView` is a main-thread-only
+  /// UIKit/GMA operation, while `Constructor` must return an object to JS synchronously —
+  /// synchronously hopping to main inside init is something we'd rather avoid (including in
+  /// environments where the JS thread is the main thread, and in test environments). Creation
+  /// is deferred until it's actually needed, at `load()` or `BannerAdView` attachment time.
   var bannerView: BannerView? {
     runOnMain {
       if isReleased {
@@ -110,7 +119,7 @@ final class BannerAd: SharedObject {
       let view = BannerView(adSize: adSizeFor(cgSize: CGSize(width: adWidth, height: adHeight)))
       view.adUnitID = adUnitId
       view.delegate = delegateProxy
-      // GMA では課金イベントはデリゲートではなくクロージャで通知される。
+      // GMA reports paid events via a closure, not the delegate.
       view.paidEventHandler = { [weak self] value in
         self?.emit(event: "paid", payload: [
           "value": value.value.doubleValue,
@@ -123,8 +132,8 @@ final class BannerAd: SharedObject {
     }
   }
 
-  /// 現在この広告を表示している BannerAdView。所有権の判定に使う（weak なので
-  /// View が解放されれば自動的に nil になる）。
+  /// The BannerAdView currently displaying this ad. Used to decide ownership (`weak`, so it
+  /// automatically becomes nil once the view is deallocated).
   weak var currentAttachment: BannerAdView?
 
   /// The view `currentAttachment` took this ad from. When the current owner gives the ad up,
@@ -134,7 +143,7 @@ final class BannerAd: SharedObject {
   /// `weak` for the same reason as `currentAttachment`.
   weak var previousAttachment: BannerAdView?
 
-  /// リクエストしたサイズ。JS 側の `ad.size` になる。
+  /// The requested size. Becomes `ad.size` on the JS side.
   let requestedSize: [String: Any?]
 
   private let adUnitId: String
@@ -143,13 +152,14 @@ final class BannerAd: SharedObject {
   private let requestOptions: [String: Any?]?
   private let delegateProxy = BannerAdDelegateProxy()
 
-  // status/error/loadedSize/responseInfo は BannerViewDelegate のコールバック（メインスレッド）
-  // から書き込まれ、JS 側の Property getter から読み取られる（React の render のたびに走る
-  // ホットパス）。以前は読み取り側を `runOnMain`（＝main.sync）でメインスレッドへ同期させていたが、
-  // それは「JS スレッドが JS ランタイムを保持したまま main の完了を待つ」形になり、main が
-  // 同じランタイムへ同期的に割り込む経路（`runOnMain` のコメント参照）とロック順序が衝突しうる
-  // うえに、頻繁に呼ばれるパスをわざわざメインスレッドの詰まり具合に晒すことになる。
-  // main を奪い合わない `NSLock` に置き換えて、データ競合だけを閉じる。
+  // status/error/loadedSize/responseInfo are written from BannerViewDelegate callbacks (main
+  // thread) and read from JS-side Property getters (a hot path that runs on every React
+  // render). Reads used to be synced to the main thread via `runOnMain` (i.e. `main.sync`),
+  // but that takes the form of "the JS thread holds the JS runtime while waiting for main to
+  // finish", which can collide in lock ordering with the path where main synchronously
+  // interrupts that same runtime (see `runOnMain`'s comment) — and it needlessly exposes a
+  // frequently-called path to however backed-up main happens to be. Replaced with an `NSLock`
+  // that doesn't contend for main, closing only the data race.
   private let stateLock = NSLock()
   private var _status: String = "loading"
   private var _error: [String: Any?]?
@@ -193,28 +203,29 @@ final class BannerAd: SharedObject {
     delegateProxy.owner = self
   }
 
-  /// JS からは同期関数として呼ばれるが（`Function("load")`、戻り値は無い）、中身は
-  /// `DispatchQueue.main.async` に投げるだけ。以前は `runOnMain`（＝main.sync）で
-  /// 呼び出しスレッドをブロックしていたが、`load()` は戻り値を必要としないので、
-  /// わざわざ JS 側のスレッドを塞いでメインの完了を待つ理由が無い。
+  /// Called from JS as a synchronous function (`Function("load")`, no return value), but the
+  /// body just dispatches to `DispatchQueue.main.async`. This used to block the calling thread
+  /// with `runOnMain` (i.e. `main.sync`), but since `load()` has no return value, there's no
+  /// reason to hold up the JS-side thread waiting for main to finish.
   func load() {
     DispatchQueue.main.async { [self] in
       guard let view = bannerView else {
-        // release() 済み。もう表示するものが無いので何もしない。
+        // Already release()d. Nothing left to show, so do nothing.
         return
       }
 
       setStatus("loading", error: nil)
 
-      // rootViewController は weak かつ「表示中の最前面 view controller」なので、init 時点で
-      // 一度だけ解決して固定するとプリロード時（まだ view controller が存在しない）に nil の
-      // ままになったり、後からモーダルが閉じて無効化されたりする。load() のたびに解決し直す。
+      // rootViewController is weak and means "the currently-frontmost view controller", so
+      // resolving it once at init time and caching it would leave it nil during preload
+      // (before any view controller exists), or stale after a modal closes later. Resolve it
+      // fresh on every load() call.
       guard let rootViewController = resolveRootViewController() else {
         setStatus("error", error: [
           "code": -1,
           "message":
-            "表示可能な view controller が見つからないため広告をロードできませんでした。"
-            + "アプリの起動が完了してから、または BannerAdView をマウントしてから load() を呼び直してください。",
+            "Could not load the ad because no visible view controller was found. "
+            + "Try again after the app finishes launching, or after BannerAdView has mounted, and call load() again.",
           "domain": "ExpoGoogleMobileAds",
         ])
         return
@@ -228,15 +239,16 @@ final class BannerAd: SharedObject {
       if let contentUrl = requestOptions?["contentUrl"] as? String {
         request.contentURL = contentUrl
       }
-      // networkExtras（アダプター固有の GADAdNetworkExtras）はメディエーションアダプター
-      // 実装に依存するため未対応。特定のメディエーションを追加するタスクで実装する。
+      // networkExtras (adapter-specific GADAdNetworkExtras) isn't supported yet, since it
+      // depends on a concrete mediation adapter implementation. Implement it alongside a
+      // task that adds a specific mediation network.
       view.load(request)
     }
   }
 
-  /// 表示中の view controller をそのつど解決する。`BannerAdView` にまだマウントされていない
-  /// （プリロード中の）場合は `Utilities.currentViewController()` がまだ何も返せないことがある
-  /// ため、アプリのキーウィンドウの rootViewController にフォールバックする。
+  /// Resolves the currently-visible view controller fresh every time. If not yet mounted in a
+  /// `BannerAdView` (i.e. still preloading), `Utilities.currentViewController()` may not yet
+  /// have anything to return, so this falls back to the app's key window's rootViewController.
   private func resolveRootViewController() -> UIViewController? {
     if let vc = appContext?.utilities?.currentViewController() {
       return vc
@@ -246,7 +258,8 @@ final class BannerAd: SharedObject {
       .first
   }
 
-  /// status/error をロックの下でまとめて更新し、更新後の値で `statusChange` を発火する。
+  /// Updates status/error together under the lock, then fires `statusChange` with the updated
+  /// values.
   private func setStatus(_ status: String, error: [String: Any?]?) {
     stateLock.lock()
     _status = status
@@ -259,41 +272,44 @@ final class BannerAd: SharedObject {
     emit(event: "statusChange", payload: ["status": status, "error": error as Any])
   }
 
-  /// JS 側が `release()` を呼んで SharedObject の登録が解除される直前に呼ばれる。
-  /// `release()` は JS との結びつきを切るだけでネイティブ側の後始末はしてくれないため、
-  /// ここでデリゲートを外し、課金クロージャを外し、View から取り除く。View 側の
-  /// `currentAd` プロパティ自体は（Fabric のリサイクルで prepareForRecycle が呼ばれても）
-  /// 誰も明示的に nil にしてくれないままになり得るが、`bannerView` が `isReleased` を見て
-  /// 二度と作り直さなくなるので、少なくともネイティブの広告表示・インプレッション計測・
-  /// イベント発火・新しい `GADBannerView` の再生成は確実に止まる。
+  /// Called just before the JS side calls `release()` and the SharedObject's registry entry
+  /// is torn down. `release()` only severs the link to JS and does no native-side cleanup on
+  /// its own, so here we detach the delegate, clear the paid-event closure, and remove the ad
+  /// from its view. The view's own `currentAd` property can end up never explicitly cleared by
+  /// anyone (even if Fabric's recycling calls prepareForRecycle), but since `bannerView` checks
+  /// `isReleased` and refuses to create a new one, at minimum native ad display, impression
+  /// tracking, event firing, and creating a new `GADBannerView` are all guaranteed to stop.
   ///
-  /// **`runOnMain`（＝`DispatchQueue.main.sync`）を使ってはいけない**: `SharedObjectRegistry.delete`
-  /// はレジストリの `Mutex`（`state.withLock`）を保持したままこのメソッドを呼ぶ
-  /// （`SharedObjectRegistry.swift` の `delete(_:)` を参照）。一方、メインスレッドで
-  /// `BannerAdView` に `ad` prop がセットされるときは `ExpoFabricViewObjC` の
-  /// `updateProps` → `DynamicSharedObjectType.cast` → `registry.get` → 同じ `state.withLock`
-  /// という経路で同じミューテックスを取りに行く。ここで `main.sync` を使うと
-  /// 「JS スレッド: レジストリのロックを保持 → メインスレッドの完了待ち」
-  /// 「メインスレッド: 別の広告のマウント処理でレジストリのロック待ち」という
-  /// 逆向きの依存が同時に成立し得て、ロックの順序が反転してデッドロックする
-  /// （ビルドはもちろん、ふつうの手動テストでも再現しにくく、アプリが無言でフリーズする）。
+  /// **Must not use `runOnMain` (i.e. `DispatchQueue.main.sync`) here**: `SharedObjectRegistry.delete`
+  /// calls this method while holding the registry's `Mutex` (`state.withLock`) (see
+  /// `SharedObjectRegistry.swift`'s `delete(_:)`). Meanwhile, when the main thread sets the `ad`
+  /// prop on a `BannerAdView`, it goes through `ExpoFabricViewObjC`'s `updateProps` →
+  /// `DynamicSharedObjectType.cast` → `registry.get`, which takes the same `state.withLock`.
+  /// Using `main.sync` here would let "JS thread: holds the registry lock → waits for main to
+  /// finish" and "main thread: waits for the registry lock while mounting some other ad" hold
+  /// simultaneously in opposite directions, reversing lock order into a deadlock (one that's
+  /// hard to reproduce even in ordinary manual testing, let alone in a build — the app just
+  /// silently freezes).
   ///
-  /// そのため、テアダウンに必要な `self` への強参照だけをクロージャに持たせ、
-  /// `DispatchQueue.main.async` で後始末をメインスレッドへ「投げっぱなし」にする。これにより
-  /// このメソッド自身は一切ブロックせずに即座に返り、`state.withLock` はすぐに解放される
-  /// （＝レジストリ側は誰の完了も待たない）。`_bannerView` の読み取りも（fix round 2 で
-  /// 呼び出し元スレッドのまま読んでいたのを修正し）この async ブロックの中に移した ——
-  /// 呼び出し元スレッド（JS スレッドであることが多い）から `_bannerView` を無同期で読むのは、
-  /// メインスレッドからの書き込み（`bannerView` の遅延生成）とのデータ競合になるため。
-  /// このメソッドが返った後もクロージャが `self` を保持する間は `BannerAd` も
-  /// （そしてそれが持つ `GADBannerView` も）解放されず、async ブロックが実行されるまで
-  /// 生存が保証される。この間に他から `_bannerView`/`currentAttachment`/`isReleased` を
-  /// 触れるのはメインスレッド上のコードだけであり、それらは GCD のメインキュー上でこの async
-  /// ブロックと直列化されるため、途中で不整合な状態を観測されることはない。
+  /// So this closure only holds a strong reference to `self` for what teardown needs, and
+  /// hands the cleanup off to the main thread "fire and forget" via `DispatchQueue.main.async`.
+  /// That way this method itself never blocks and returns immediately, and `state.withLock` is
+  /// released right away (i.e. the registry side waits on nobody). Reading `_bannerView` was
+  /// also moved into this async block (fixed in review round 2, where it used to be read on
+  /// the caller's thread) — reading `_bannerView` unsynchronized from the caller's thread
+  /// (often the JS thread) would race with writes from the main thread (lazy creation inside
+  /// `bannerView`).
   ///
-  /// なお `sharedObjectDidRelease()`（今は override していない）も同じ `state.withLock` の
-  /// 中で呼ばれる（`SharedObjectRegistry.swift` の `delete(_:)` 参照）。将来 override する
-  /// 場合も、ここと同じ理由で `runOnMain`/`main.sync` を使ってはいけない。
+  /// As long as the closure keeps holding `self` after this method returns, `BannerAd` (and the
+  /// `GADBannerView` it owns) stays alive until the async block runs. During that window, the
+  /// only code that can touch `_bannerView`/`currentAttachment`/`isReleased` is code on the
+  /// main thread, which is serialized with this async block on GCD's main queue, so no
+  /// inconsistent state can be observed in between.
+  ///
+  /// Note that `sharedObjectDidRelease()` (not currently overridden) is also called while
+  /// holding that same `state.withLock` (see `delete(_:)` in `SharedObjectRegistry.swift`). If
+  /// it's ever overridden in the future, the same reasoning applies: don't use
+  /// `runOnMain`/`main.sync` there either.
   override func sharedObjectWillRelease() {
     DispatchQueue.main.async { [self] in
       isReleased = true
@@ -303,20 +319,21 @@ final class BannerAd: SharedObject {
       view.removeFromSuperview()
       currentAttachment = nil
       previousAttachment = nil
-      // GADBannerView（UIView）の最後の強参照をここで手放すことで、UIView の解放が
-      // メインスレッド上で起きるようにする。
+      // Drop the last strong reference to the GADBannerView (a UIView) here, so that the
+      // UIView's deallocation happens on the main thread.
       _bannerView = nil
     }
   }
 
   // MARK: - BannerViewDelegate callbacks (forwarded from BannerAdDelegateProxy)
-  // GMA はこれらのコールバックを常にメインスレッドで呼ぶため、追加の main ホップは不要。
+  // GMA always calls these callbacks on the main thread, so no extra main hop is needed.
 
   fileprivate func handleDidReceiveAd(_ bannerView: BannerView) {
-    // GMA を叩く処理（`adSize` / `responseInfo` の読み取りと、`adNetworkInfoArray` を辿って
-    // 辞書を組み立てる `responseInfoToDictionary`）はロックの外で先に済ませる。
-    // `stateLock` は JS の render のたびに Property getter から取られるため、そこに
-    // GMA の任意の処理と確保を挟みたくない。ロックは代入だけのために取る。
+    // Do the GMA-touching work (reading `adSize`/`responseInfo`, and walking
+    // `adNetworkInfoArray` to build a dictionary in `responseInfoToDictionary`) outside the
+    // lock, up front. `stateLock` is taken from the Property getter on every JS render, so we
+    // don't want to interleave arbitrary GMA work and allocation with that. The lock is only
+    // taken for the assignment itself.
     let size: [String: Any?] = [
       "width": bannerView.adSize.size.width,
       "height": bannerView.adSize.size.height,
@@ -325,10 +342,11 @@ final class BannerAd: SharedObject {
 
     stateLock.lock()
     _status = "loaded"
-    // GMA はバナーを自動リフレッシュするため、「失敗 → 成功」の遷移が普通に起きる。
-    // ここで `_error` を消さないと `status === "loaded"` なのに古い error が残り続け、
-    // `statusChange` のペイロードにもそれが乗るので、正常に表示されている広告の脇に
-    // エラー表示を出し続ける consumer が現れる。成功時は必ずクリアする。
+    // GMA auto-refreshes banners, so a failure-then-success transition is a normal occurrence.
+    // If `_error` isn't cleared here, `status === "loaded"` would coexist with a stale error,
+    // which also rides along in the `statusChange` payload — leading a consumer to keep
+    // showing an error next to an ad that's actually displaying fine. Always clear it on
+    // success.
     _error = nil
     _loadedSize = size
     _responseInfo = info
@@ -349,9 +367,10 @@ final class BannerAd: SharedObject {
   }
 }
 
-/// `BannerViewDelegate`（ObjC プロトコル）は `NSObjectProtocol` を要求するため、
-/// `NSObject` を継承しない `BannerAd`（SharedObject）は直接は適合できない。
-/// この NSObject ベースのプロキシが受け取ったイベントを `owner` の `handle...` メソッドへ転送する。
+/// `BannerViewDelegate` (an ObjC protocol) requires `NSObjectProtocol`, so `BannerAd`
+/// (a `SharedObject`, which doesn't inherit from `NSObject`) can't conform to it directly.
+/// This NSObject-based proxy forwards whatever events it receives to `owner`'s `handle...`
+/// methods.
 private final class BannerAdDelegateProxy: NSObject, BannerViewDelegate {
   weak var owner: BannerAd?
 

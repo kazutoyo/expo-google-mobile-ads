@@ -4,11 +4,13 @@ import android.content.Context
 import android.content.pm.PackageManager
 
 /**
- * config plugin（Task 11）が `AndroidManifest.xml` の meta-data に書いた AdMob App ID を読む。
+ * Reads the AdMob App ID that the config plugin (Task 11) wrote into
+ * `AndroidManifest.xml`'s meta-data.
  *
- * iOS には対応物が不要: GMA iOS SDK は `Info.plist` の `GADApplicationIdentifier` を
- * 自ら読むため、ライブラリが仲介する必要がない。Android の Next-Gen SDK は
- * `InitializationConfig.Builder(appId)` に明示的に渡す必要があるため、この読み出しが要る。
+ * No iOS counterpart is needed: the GMA iOS SDK reads `Info.plist`'s
+ * `GADApplicationIdentifier` itself, so the library doesn't need to mediate. The Android
+ * Next-Gen SDK requires it to be passed explicitly to `InitializationConfig.Builder(appId)`,
+ * which is why this lookup is necessary.
  */
 object AppIdProvider {
   private const val META_DATA_KEY = "com.google.android.gms.ads.APPLICATION_ID"
@@ -21,8 +23,8 @@ object AppIdProvider {
     )
     return appInfo.metaData?.getString(META_DATA_KEY)
       ?: throw IllegalStateException(
-        "AdMob の App ID が設定されていません。app.json の expo-google-mobile-ads " +
-          "プラグインに androidAppId を指定してください。"
+        "The AdMob App ID is not set. Specify androidAppId in the expo-google-mobile-ads " +
+          "plugin config in app.json."
       )
   }
 }

@@ -19,17 +19,17 @@ beforeEach(() => {
 });
 
 describe('initialize', () => {
-  it('ネイティブの初期化を呼び、結果を返す', async () => {
+  it('calls native initialization and returns the result', async () => {
     await expect(initialize()).resolves.toBe(status);
     expect(mockNative.initializeAsync).toHaveBeenCalledTimes(1);
   });
 
-  it('二度呼んでもネイティブの初期化は一度だけ', async () => {
+  it('only initializes native once even when called twice', async () => {
     await Promise.all([initialize(), initialize()]);
     expect(mockNative.initializeAsync).toHaveBeenCalledTimes(1);
   });
 
-  it('初期化完了で保留中のタスクが実行される', async () => {
+  it('runs pending tasks once initialization completes', async () => {
     const task = jest.fn();
     runWhenInitialized(task);
     expect(task).not.toHaveBeenCalled();
@@ -39,7 +39,7 @@ describe('initialize', () => {
     expect(task).toHaveBeenCalledTimes(1);
   });
 
-  it('初期化が失敗しても保留中のタスクは実行されない', async () => {
+  it('does not run pending tasks if initialization fails', async () => {
     mockNative.initializeAsync.mockRejectedValue(new Error('boom'));
     const task = jest.fn();
     runWhenInitialized(task);
@@ -49,7 +49,7 @@ describe('initialize', () => {
     expect(task).not.toHaveBeenCalled();
   });
 
-  it('初期化が失敗した後、再度呼び出すとネイティブの初期化が再実行される', async () => {
+  it('re-runs native initialization when called again after a failure', async () => {
     mockNative.initializeAsync.mockRejectedValueOnce(new Error('boom'));
     await expect(initialize()).rejects.toThrow('boom');
 
@@ -59,7 +59,7 @@ describe('initialize', () => {
     expect(mockNative.initializeAsync).toHaveBeenCalledTimes(2);
   });
 
-  it('失敗後の再初期化が成功すると保留中のタスクが実行される', async () => {
+  it('runs pending tasks once a re-initialization after a failure succeeds', async () => {
     mockNative.initializeAsync.mockRejectedValueOnce(new Error('boom'));
     const task = jest.fn();
     runWhenInitialized(task);
@@ -74,7 +74,7 @@ describe('initialize', () => {
 });
 
 describe('runWhenInitialized', () => {
-  it('initialize 未呼び出しなら __DEV__ で警告する', () => {
+  it('warns in __DEV__ when initialize has not been called', () => {
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
 
     runWhenInitialized(jest.fn());
@@ -83,7 +83,7 @@ describe('runWhenInitialized', () => {
     warn.mockRestore();
   });
 
-  it('initialize 呼び出し済みなら警告しない', () => {
+  it('does not warn once initialize has been called', () => {
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
 
     initialize();
@@ -95,7 +95,7 @@ describe('runWhenInitialized', () => {
 });
 
 describe('setRequestConfiguration', () => {
-  it('ネイティブへそのまま渡す', () => {
+  it('passes the config through to native unchanged', () => {
     const config = { testDeviceIds: ['ABC'] };
     setRequestConfiguration(config);
     expect(mockNative.setRequestConfiguration).toHaveBeenCalledWith(config);

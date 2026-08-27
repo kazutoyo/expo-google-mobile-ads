@@ -26,23 +26,23 @@ export function validateAppId(appId: string | undefined, platform: 'android' | '
 
   if (!appId) {
     throw new Error(
-      `[expo-google-mobile-ads] ${key} が設定されていません。` +
-        `app.json のプラグイン設定に AdMob の App ID を指定してください。`
+      `[expo-google-mobile-ads] ${key} is not set. ` +
+        `Specify your AdMob App ID in the plugin config in app.json.`
     );
   }
 
   if (!APP_ID_PATTERN.test(appId)) {
     throw new Error(
-      `[expo-google-mobile-ads] ${key} が AdMob の App ID の形式ではありません: "${appId}"。` +
-        `App ID は "ca-app-pub-0000000000000000~0000000000" の形式です。` +
-        `広告ユニット ID（"~" ではなく "/" 区切り）と取り違えていないか確認してください。`
+      `[expo-google-mobile-ads] ${key} is not in the AdMob App ID format: "${appId}". ` +
+        `An App ID looks like "ca-app-pub-0000000000000000~0000000000". ` +
+        `Check that you haven't passed an ad unit ID by mistake (that's separated by "/", not "~").`
     );
   }
 
   return appId;
 }
 
-/** dependencies { } に不足分の implementation 行だけを追記する。既にある行は再追記しない。 */
+/** Appends only the missing implementation lines to dependencies { }. Skips lines already present. */
 export function injectAndroidDependencies(contents: string, dependencies: string[]): string {
   const lines = dependencies
     .filter((dep) => !contents.includes(dep))
@@ -54,7 +54,7 @@ export function injectAndroidDependencies(contents: string, dependencies: string
   return contents.replace(/dependencies\s*\{/, (match) => `${match}\n${lines}`);
 }
 
-/** allprojects { repositories { } } に不足分の maven リポジトリだけを追記する。既にある URL は再追記しない。 */
+/** Appends only the missing maven repositories to allprojects { repositories { } }. Skips URLs already present. */
 export function injectAndroidMavenRepositories(contents: string, repositories: string[]): string {
   const lines = repositories
     .filter((url) => !contents.includes(url))
@@ -66,7 +66,7 @@ export function injectAndroidMavenRepositories(contents: string, repositories: s
   return contents.replace(/allprojects\s*\{\s*repositories\s*\{/, (match) => `${match}\n${lines}`);
 }
 
-/** Podfile に不足分の pod 行だけを追記する。既に同名の pod がある場合は再追記しない。 */
+/** Appends only the missing pod lines to the Podfile. Skips a pod already present under the same name. */
 export function injectIosPods(contents: string, pods: Record<string, string>): string {
   let result = contents;
 

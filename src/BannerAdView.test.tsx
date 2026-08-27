@@ -1,9 +1,9 @@
 const mockNativeView = jest.fn((_props: any) => null);
 
-// requireNativeViewManager() は BannerAdView.tsx のモジュール評価時（import 巻き上げにより
-// このファイルの mockNativeView 代入より前）に一度だけ呼ばれるため、戻り値を直接
-// mockNativeView にすると巻き上げ順の問題で undefined を返してしまう。
-// 呼び出しを遅延させるラッパーを返し、実際の描画時に mockNativeView を参照する。
+// requireNativeViewManager() is called once when BannerAdView.tsx's module is evaluated
+// (due to import hoisting, before this file's mockNativeView assignment runs), so returning
+// mockNativeView directly would capture undefined because of that hoisting order. Return a
+// wrapper that defers the lookup, referencing mockNativeView only when actually rendered.
 jest.mock('expo-modules-core', () => ({
   requireNativeViewManager: () => (props: any) => mockNativeView(props),
 }));
@@ -21,9 +21,9 @@ function makeAd(overrides: any = {}) {
 beforeEach(() => jest.clearAllMocks());
 
 describe('BannerAdView', () => {
-  // SharedObject をそのまま渡すと DEV の deepFreezeAndThrowOnMutationInDev に凍結され、
-  // 以降 release() が "failed to define internal native state property" で落ちる。
-  it('ネイティブ View へは SharedObject 本体ではなく shared object id を渡す', async () => {
+  // Passing the SharedObject itself would get it frozen by DEV's deepFreezeAndThrowOnMutationInDev,
+  // after which a later release() throws "failed to define internal native state property".
+  it('passes the shared object id to the native view, not the SharedObject itself', async () => {
     const ad = makeAd();
 
     await render(<BannerAdView ad={ad} />);
@@ -41,7 +41,7 @@ describe('BannerAdView', () => {
     expect(mockNativeView.mock.calls[0][0]).toMatchObject({ ad: null });
   });
 
-  it('ロード前はリクエストしたサイズで領域を予約する', async () => {
+  it('reserves space using the requested size before the ad loads', async () => {
     const ad = makeAd({ size });
 
     await render(<BannerAdView ad={ad} />);
@@ -51,7 +51,7 @@ describe('BannerAdView', () => {
     );
   });
 
-  it('ロード後は実際に返ったサイズを使う', async () => {
+  it('uses the actual returned size once loaded', async () => {
     const ad = makeAd({ status: 'loaded', size, loadedSize: { width: 390, height: 100 } });
 
     await render(<BannerAdView ad={ad} />);
@@ -61,7 +61,7 @@ describe('BannerAdView', () => {
     );
   });
 
-  it('style で上書きできる', async () => {
+  it('can be overridden with style', async () => {
     const ad = makeAd({ size });
 
     await render(<BannerAdView ad={ad} style={{ height: 200 }} />);

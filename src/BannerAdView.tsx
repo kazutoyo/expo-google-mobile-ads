@@ -6,7 +6,7 @@ import type { BannerAd } from './BannerAd';
 const NativeView = requireNativeViewManager('ExpoGoogleMobileAds', 'BannerAdView');
 
 export type BannerAdViewProps = {
-  /** createBannerAd または useBannerAd で作った広告。未ロードでも渡してよい。 */
+  /** An ad created by createBannerAd or useBannerAd. Safe to pass before it has loaded. */
   ad: BannerAd;
   style?: StyleProp<ViewStyle>;
 };
@@ -39,8 +39,8 @@ function sharedObjectIdOf(ad: BannerAd): number | null {
 }
 
 /**
- * 広告を表示する。マウント時にネイティブ View をアタッチし、アンマウント時はデタッチのみ行う。
- * 広告は破棄されないため、画面遷移をまたいで再利用できる。
+ * Displays an ad. Attaches the native view on mount and only detaches it on unmount —
+ * the ad itself is never destroyed, so it can be reused across screen transitions.
  */
 export function BannerAdView({ ad, style }: BannerAdViewProps) {
   const size = ad.loadedSize ?? ad.size;

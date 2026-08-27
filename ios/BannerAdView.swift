@@ -1,50 +1,51 @@
 import ExpoModulesCore
 
-/// 広告を表示する View。マウント時にネイティブ `BannerView` を addSubview し、
-/// アンマウント時は removeFromSuperview するだけ — 広告（`BannerAd`）自体は破棄しない。
+/// The view that displays an ad. addSubviews the native `BannerView` on mount and only
+/// removeFromSuperview on unmount — the ad (`BannerAd`) itself is never destroyed.
 final class BannerAdView: ExpoView {
   private var currentAd: BannerAd?
 
   func setAd(_ ad: BannerAd?) {
-    // `currentAd === ad` だけでは不十分: 別の View にこの広告を奪われた後、
-    // 同じ ad が再び props で渡ってきても（`ad.bannerView.superview` が自分ではなくなっている
-    // ため）二度と取り戻せず、この View が永久に空白のままになってしまう
-    // （実際に自分がまだ画面に出しているときだけ早期リターンする）。
+    // `currentAd === ad` alone isn't enough: once another View has taken this ad, the same ad
+    // coming back through props (`ad.bannerView.superview` is no longer self) can never be
+    // reclaimed, leaving this View permanently blank
+    // (the early return only fires when this view is actually still the one on screen).
     if currentAd === ad, ad?.bannerView?.superview === self {
       return
     }
     detachCurrentAdIfOwned()
     currentAd = ad
 
-    // `ad.bannerView` は release() 済みなら nil を返す。その場合は表示するものが無いので、
-    // 空のバナーを作り直してマウントしたりはしない（release 後にこの ad をまだ保持している
-    // View が再度 props を受け取ってしまうケースへの対処）。
+    // `ad.bannerView` returns nil once release()d. In that case there's nothing to show, so
+    // don't recreate and mount an empty banner (this guards against a View that still holds
+    // this ad after release receiving props again).
     guard let ad, let bannerView = ad.bannerView else { return }
 
-    // 別の View がまだこの広告の所有者として記録されていて、かつ実際に画面（window）に
-    // 乗っているときだけ警告する。`deinit` のタイミングは不定なので、単なる再マウント
-    // （古い View インスタンスがまだ解放されていないだけ）では所有権 or window のどちらかが
-    // 外れており、警告は鳴らない。両方 true のときだけが本当の「同時使用」。
+    // Only warn when another View is still recorded as this ad's owner AND it's actually on
+    // screen (attached to a window). `deinit` timing is indeterminate, so a plain remount
+    // (the old View instance just hasn't been deallocated yet) will have either ownership or
+    // window detached, and won't warn. Only when both are true is it a real "simultaneous use".
     // `detachCurrentAdIfOwned()` above already cleared our own ownership, so any owner still
     // recorded here is another view. Remember it so the ad can be handed back when we go away.
     let otherOwner = ad.currentAttachment
     if let otherOwner, otherOwner !== self, bannerView.window != nil {
       log.warn(
-        "同じ広告が複数の BannerAdView に渡されています。最後にマウントされた View にのみ表示されます。"
+        "The same ad was passed to multiple BannerAdViews. Only the most recently mounted View will display it."
       )
     }
     ad.previousAttachment = otherOwner
     bannerView.removeFromSuperview()
-    // このバージョンの ExpoView (ExpoFabricView) には `reactViewController()` が無いため、
-    // `appContext.utilities.currentViewController()` で表示中の view controller を取得する。
-    // （`load()` 時にも都度解決し直しているので、ここでの設定はマウント直後の表示に効く。）
+    // This version of ExpoView (ExpoFabricView) has no `reactViewController()`, so get the
+    // currently-visible view controller via `appContext.utilities.currentViewController()`.
+    // (This is also resolved fresh on every `load()` call, so setting it here matters for
+    // display right after mount.)
     bannerView.rootViewController = appContext?.utilities?.currentViewController()
     ad.currentAttachment = self
     addSubview(bannerView)
   }
 
-  /// 自分がまだこの広告の所有者である場合のみ View から外す。
-  /// 既に別の View に奪われている場合は何もしない（奪い返さない）。
+  /// Removes the ad from the view only if this view is still its owner.
+  /// Does nothing if it has already been taken by another view (doesn't steal it back).
   ///
   /// Only called from `setAd()`'s reassignment path, so it must NOT hand the ad back to
   /// `previousAttachment` — that would fire for a view that is about to re-take the ad two lines
@@ -59,9 +60,9 @@ final class BannerAdView: ExpoView {
 
   override func layoutSubviews() {
     super.layoutSubviews()
-    // 所有権を失っている（別の View に奪われた）場合はフレームを触らない。
-    // でないと、奪われた後の古い View がレイアウトされるたびに、今は別の View が
-    // 表示している広告のフレームを書き換えてしまう。
+    // Don't touch the frame if ownership has been lost (taken by another View). Otherwise,
+    // every time the old View that lost ownership gets laid out, it would overwrite the frame
+    // of the ad that's now being displayed by a different View.
     guard let currentAd, currentAd.currentAttachment === self else { return }
     currentAd.bannerView?.frame = bounds
   }

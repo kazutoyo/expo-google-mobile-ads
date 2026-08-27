@@ -23,13 +23,13 @@ const mockNative = NativeModule as jest.Mocked<typeof NativeModule>;
 beforeEach(() => jest.clearAllMocks());
 
 describe('useBannerAdSize', () => {
-  it('spec に応じたサイズを返す', async () => {
+  it('returns the size matching the spec', async () => {
     const { result } = await renderHook(() => useBannerAdSize({ type: 'largeAnchoredAdaptive' }));
 
     expect(result.current).toEqual({ width: 390, height: 100 });
   });
 
-  it('画面幅が変わると再計算する', async () => {
+  it('recalculates when the screen width changes', async () => {
     const { rerender } = await renderHook(() => useBannerAdSize({ type: 'largeAnchoredAdaptive' }));
 
     expect(mockNative.getLargeAnchoredAdaptiveSize).toHaveBeenCalledTimes(1);

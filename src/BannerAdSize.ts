@@ -8,9 +8,9 @@ export type BannerAdSize = {
 };
 
 export type AdaptiveOptions = {
-  /** dp。省略時は画面幅 */
+  /** In dp. Defaults to the screen width. */
   width?: number;
-  /** 既定は 'current'（呼んだ瞬間の向き） */
+  /** Defaults to 'current' (the orientation at call time). */
   orientation?: 'current' | 'portrait' | 'landscape';
 };
 
@@ -31,10 +31,10 @@ export const BannerAdSize = {
   LEADERBOARD: { width: 728, height: 90 } as BannerAdSize,
 
   /**
-   * アンカー型アダプティブバナーのサイズ。高さは 50〜90dp。
+   * Size for an anchored adaptive banner. Height ranges from 50 to 90dp.
    *
-   * 対応するネイティブ API は非推奨であり、将来の SDK メジャーで削除される可能性がある。
-   * 新規実装では largeAnchoredAdaptive を検討すること。
+   * The underlying native API is deprecated and may be removed in a future SDK major
+   * version. Prefer largeAnchoredAdaptive for new implementations.
    */
   anchoredAdaptive(options: AdaptiveOptions = {}): BannerAdSize {
     return NativeModule.getAnchoredAdaptiveSize(
@@ -43,7 +43,7 @@ export const BannerAdSize = {
     );
   },
 
-  /** アンカー型アダプティブバナー Large のサイズ。高さは 50〜150dp。 */
+  /** Size for a large anchored adaptive banner. Height ranges from 50 to 150dp. */
   largeAnchoredAdaptive(options: AdaptiveOptions = {}): BannerAdSize {
     return NativeModule.getLargeAnchoredAdaptiveSize(
       options.width ?? screenWidth(),
@@ -51,7 +51,7 @@ export const BannerAdSize = {
     );
   },
 
-  /** スクロール内に置くインライン型アダプティブバナーのサイズ。 */
+  /** Size for an inline adaptive banner meant to sit inside scrolling content. */
   inlineAdaptive(options: AdaptiveOptions & { maxHeight?: number } = {}): BannerAdSize {
     return NativeModule.getInlineAdaptiveSize(
       options.width ?? screenWidth(),

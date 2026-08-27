@@ -4,9 +4,10 @@ import { useWindowDimensions } from 'react-native';
 import { BannerAdSize, type BannerAdSizeSpec } from '../BannerAdSize';
 
 /**
- * 画面の向きや幅の変化に追従してバナーサイズを再計算する。
+ * Recalculates the banner size as the screen orientation or width changes.
  *
- * spec の orientation が 'current' の場合、回転時に高さが変わりうるためこの hook を使う。
+ * Use this hook when spec's orientation is 'current', since the height can change on
+ * rotation.
  */
 export function useBannerAdSize(spec: BannerAdSizeSpec): BannerAdSize {
   const { width, height } = useWindowDimensions();
@@ -14,7 +15,7 @@ export function useBannerAdSize(spec: BannerAdSizeSpec): BannerAdSize {
 
   return useMemo(
     () => BannerAdSize.resolve(spec),
-    // 画面サイズが変わったら再計算する
+    // Recalculate whenever the screen size changes
     [width, height, spec.type, spec.width, spec.orientation, maxHeight]
   );
 }

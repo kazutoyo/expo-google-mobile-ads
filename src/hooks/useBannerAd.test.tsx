@@ -27,7 +27,7 @@ beforeEach(() => {
 });
 
 describe('useBannerAdState', () => {
-  it('渡された ad の statusChange を購読する', async () => {
+  it('subscribes to the passed ad\'s statusChange', async () => {
     const ad = makeAd({ status: 'loading' });
 
     await renderHook(() => useBannerAdState(ad));
@@ -38,7 +38,7 @@ describe('useBannerAdState', () => {
     });
   });
 
-  it('loaded なら isLoaded が true', async () => {
+  it('isLoaded is true when loaded', async () => {
     mockUseEvent.mockReturnValue({ status: 'loaded' });
     const ad = makeAd({ loadedSize: size });
 
@@ -48,7 +48,7 @@ describe('useBannerAdState', () => {
     expect(result.current.loadedSize).toEqual(size);
   });
 
-  it('error なら isLoaded が false でエラーを返す', async () => {
+  it('isLoaded is false and returns the error on error', async () => {
     const error = { code: 3, message: 'No fill', domain: 'com.google.admob' };
     mockUseEvent.mockReturnValue({ status: 'error', error });
 
@@ -58,7 +58,7 @@ describe('useBannerAdState', () => {
     expect(result.current.error).toBe(error);
   });
 
-  it('ad を渡した場合は ad を生成しない', async () => {
+  it('does not create an ad when one is passed in', async () => {
     await renderHook(() => useBannerAdState(makeAd()));
 
     expect(mockUseReleasingSharedObject).not.toHaveBeenCalled();
@@ -66,7 +66,7 @@ describe('useBannerAdState', () => {
 });
 
 describe('useBannerAd', () => {
-  it('useReleasingSharedObject で ad を生成し返す', async () => {
+  it('creates and returns the ad via useReleasingSharedObject', async () => {
     const ad = makeAd();
     mockUseReleasingSharedObject.mockReturnValue(ad);
 
@@ -76,7 +76,7 @@ describe('useBannerAd', () => {
     expect(result.current.ad).toBe(ad);
   });
 
-  it('adUnitId とサイズが依存配列に入る', async () => {
+  it('includes adUnitId and size in the dependency array', async () => {
     mockUseReleasingSharedObject.mockReturnValue(makeAd());
 
     await renderHook(() => useBannerAd({ adUnitId: 'unit', size }));

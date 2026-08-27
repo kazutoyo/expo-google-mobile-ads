@@ -3,8 +3,8 @@ export type BannerAdStatus = 'loading' | 'loaded' | 'error';
 export type AdapterResponse = {
   adapterClassName: string;
   latencyMillis: number;
-  // description は意図的に含めていない: ネイティブ側（GADAdNetworkResponseInfo）に
-  // 公開された description プロパティが存在せず、送られてこないため。
+  // description is deliberately omitted: the native side (GADAdNetworkResponseInfo)
+  // has no public description property, so nothing is ever sent for it.
   adError?: { code: number; message: string; domain: string };
 };
 
@@ -31,11 +31,12 @@ export type PaidEventValue = {
 export type RequestOptions = {
   keywords?: string[];
   contentUrl?: string;
-  // networkExtras は意図的に含めていない: メディエーションアダプター固有の
-  // GADAdNetworkExtras/AdNetworkExtras を要求するため、具体的なアダプターを実装する
-  // タスクなしに汎用的な変換ができない。フィールドを型に生やしたままネイティブ側で
-  // 無視すると「効くはずのものが効かない」false な約束になるため、実装されるまでは
-  // 型からも外す（後から追加してもフィールド追加は破壊的変更にならない）。
+  // networkExtras is deliberately omitted: it requires mediation-adapter-specific
+  // GADAdNetworkExtras/AdNetworkExtras, which can't be converted generically without
+  // implementing a specific adapter. Keeping the field on the type while native silently
+  // ignores it would be a false promise — something that looks like it works but doesn't —
+  // so it stays off the type until it's actually implemented (adding a field later isn't
+  // a breaking change).
 };
 
 export type RequestConfiguration = {

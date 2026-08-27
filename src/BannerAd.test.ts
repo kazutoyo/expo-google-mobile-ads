@@ -27,14 +27,14 @@ beforeEach(() => {
 });
 
 describe('createBannerAd', () => {
-  it('ネイティブの BannerAd を生成して返す', () => {
+  it('creates and returns the native BannerAd', () => {
     const ad = createBannerAd({ adUnitId: 'unit', size });
 
     expect(mockNativeBannerAd).toHaveBeenCalledWith('unit', size, undefined);
     expect(ad).toBeInstanceOf(mockNativeBannerAd);
   });
 
-  it('requestOptions をネイティブへ渡す', () => {
+  it('passes requestOptions through to native', () => {
     const requestOptions = { keywords: ['game'] };
 
     createBannerAd({ adUnitId: 'unit', size, requestOptions });
@@ -42,14 +42,14 @@ describe('createBannerAd', () => {
     expect(mockNativeBannerAd).toHaveBeenCalledWith('unit', size, requestOptions);
   });
 
-  it('ロードを直接呼ばず、初期化完了まで保留する', () => {
+  it('does not call load directly, defers it until initialization completes', () => {
     const ad = createBannerAd({ adUnitId: 'unit', size });
 
     expect((ad as any).load).not.toHaveBeenCalled();
     expect(mockRunWhenInitialized).toHaveBeenCalledTimes(1);
   });
 
-  it('保留されたタスクを実行するとロードが始まる', () => {
+  it('starts loading once the deferred task runs', () => {
     const ad = createBannerAd({ adUnitId: 'unit', size });
 
     mockRunWhenInitialized.mock.calls[0][0]();

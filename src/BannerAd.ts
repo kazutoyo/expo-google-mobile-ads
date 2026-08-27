@@ -19,15 +19,15 @@ export type BannerAdEvents = {
 };
 
 export declare class BannerAd extends SharedObject<BannerAdEvents> {
-  /** リクエストしたサイズ。ロード前の領域予約に使う。 */
+  /** The requested size. Used to reserve space before the ad loads. */
   readonly size: BannerAdSize;
   readonly status: BannerAdStatus;
   readonly error?: AdError;
   readonly loadedSize?: BannerAdSize;
   readonly responseInfo?: ResponseInfo;
-  /** 失敗後のリトライや手動リロードに使う。 */
+  /** Used to retry after a failure or to reload manually. */
   load(): void;
-  // release() と addListener() は SharedObject から継承する
+  // release() and addListener() are inherited from SharedObject
 }
 
 export type BannerAdOptions = {
@@ -37,9 +37,9 @@ export type BannerAdOptions = {
 };
 
 /**
- * バナー広告を生成し、ロードを開始する。View は不要。
+ * Creates a banner ad and starts loading it. No View is required.
  *
- * SDK の初期化が完了していない場合、ロードは初期化完了まで保留される。
+ * If the SDK hasn't finished initializing yet, the load is deferred until it does.
  */
 export function createBannerAd(options: BannerAdOptions): BannerAd {
   const ad: BannerAd = new NativeModule.BannerAd(
