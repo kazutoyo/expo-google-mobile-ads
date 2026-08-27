@@ -154,23 +154,39 @@ Fixed sizes:
 | `BannerAdSize.FULL_BANNER` | 468×60 |
 | `BannerAdSize.LEADERBOARD` | 728×90 |
 
+`FULL_BANNER` and `LEADERBOARD` are tablet sizes. Requested on a phone, they load successfully and are then silently clipped — no error, no downscale, no layout warning, identical on both platforms. The container is not widened to fit them, following content keeps its normally reserved height, and there's no horizontal scrolling to reveal the rest. If you're not targeting tablets, avoid these two.
+
 Adaptive sizes (all synchronous functions — they resolve without waiting for a load, so the display area can be reserved ahead of time):
 
 | function | height range | notes |
 |---|---|---|
 | `BannerAdSize.anchoredAdaptive(options?)` | 50–90dp | The underlying native API (both Android and iOS) is **deprecated**. It may be removed in a future SDK major version. |
 | `BannerAdSize.largeAnchoredAdaptive(options?)` | 50–150dp | The successor to `anchoredAdaptive`. Stays within 20% of portrait height, reserving a larger area for when video ad demand is high. |
-| `BannerAdSize.inlineAdaptive(options)` | depends on `maxHeight` | For placement inside scrollable content (e.g. a feed). |
+| `BannerAdSize.inlineAdaptive(options)` | up to `options.maxHeight` | For placement inside scrollable content (e.g. a feed). The served ad may be shorter than `maxHeight` — see below. |
 
 `anchoredAdaptive` wraps a deprecated native API, and that's intentional. Its shorter height has less impact on layout, so it's kept as an option for when you want to avoid `largeAnchoredAdaptive`'s larger footprint. It isn't marked `@deprecated` in TypeScript, so it doesn't throw an unwanted warning at anyone using it on purpose.
 
-`options` for both is `{ width?: number; orientation?: 'current' | 'portrait' | 'landscape' }` (defaults to screen width and `'current'`). To recompute the size when the device rotates, use the `useBannerAdSize(spec)` hook.
+`options` for `anchoredAdaptive` / `largeAnchoredAdaptive` is `{ width?: number; orientation?: 'current' | 'portrait' | 'landscape' }` (defaults to screen width and `'current'`). To recompute the size when the device rotates, use the `useBannerAdSize(spec)` hook.
 
 ```typescript
 import { useBannerAdSize } from 'expo-google-mobile-ads';
 
 const size = useBannerAdSize({ type: 'largeAnchoredAdaptive' });
 ```
+
+### inlineAdaptive
+
+`inlineAdaptive({ width?, maxHeight })` takes a **required** `maxHeight` and no `orientation` option:
+
+```typescript
+const size = BannerAdSize.inlineAdaptive({ maxHeight: 200 });
+```
+
+Both native SDKs represent "inline adaptive" as a flag on their ad-size type — `GADAdSize.flags` on iOS, `AdSize.isInlineAdaptiveBanner` on Android — not as a width/height value, so `BannerAdSize` carries a third field for it: `inlineAdaptive?: boolean`, set on every size this function returns. This has a consequence: **a `BannerAdSize` from `inlineAdaptive` must be passed around whole.** Reconstructing one from its `width` and `height` — e.g. `{ width: size.width, height: 100 }` — drops the flag, and the native side rebuilds the size as a fixed banner of exactly that height. There's no error; the request just silently stops being adaptive.
+
+`maxHeight` has no default on purpose. Each SDK's "no max height" helper returns a value nobody can reserve layout for: iOS's returns a height of `0` as a sentinel, and Android's returns the full screen height. Any default this function picked would be an arbitrary layout reservation you never asked for — so it asks you instead. `maxHeight` must be at least 32dp; 50dp or more is recommended. There's no `orientation` option either: unlike the anchored sizes, the max-height form of inline adaptive is orientation-independent on both platforms.
+
+The returned `height` is a **maximum**, not the final height — the served ad may come back shorter. `ad.loadedSize` reports what actually arrived once the ad loads; use it (not the requested size) if you need the real dimensions after load.
 
 ## Mediation
 
