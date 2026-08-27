@@ -39,6 +39,10 @@ final class FullScreenInterstitialAd: FullScreenAd {
       // Released while the request was in flight. Drop the ad instead of wiring it up.
       return
     }
+    // Two loads can overlap (the second `load()` clears `ad`, but the first request may still land
+    // afterwards), so an earlier ad can be sitting here. Clear its delegate and paid closure
+    // before replacing it, or it keeps firing events into this object.
+    tearDownAd()
     // `fullScreenContentDelegate` is a weak property; the proxy is retained by `FullScreenAd`.
     ad.fullScreenContentDelegate = delegateProxy
     // Paid events arrive through this closure property, not through the delegate.
