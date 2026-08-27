@@ -106,18 +106,17 @@ public final class ExpoGoogleMobileAdsModule: Module {
       }
     }
 
-    Function("getInlineAdaptiveSize") { (width: Double, maxHeight: Double?, orientation: String) -> [String: Any] in
+    // Only the max-height form is exposed. The per-orientation helpers
+    // (`portraitInlineAdaptiveBanner` and friends) return `size.height == 0` — the real bound
+    // lives in `GADAdSize.flags`, which cannot cross the JS boundary as a number — so the size
+    // they produce is unusable both for reserving layout space and for rebuilding an ad size
+    // from `{width, height}` later. See `inlineAdaptive()` in BannerAdSize.ts.
+    //
+    // Unlike the anchored helpers this one is not documented as main-thread-only, but it stays
+    // inside `runOnMain` for consistency with the other two: it is a short numeric call.
+    Function("getInlineAdaptiveSize") { (width: Double, maxHeight: Double) -> [String: Any] in
       runOnMain {
-        let adSize: AdSize
-        if let maxHeight {
-          adSize = inlineAdaptiveBanner(width: width, maxHeight: maxHeight)
-        } else {
-          switch orientation {
-          case "portrait": adSize = portraitInlineAdaptiveBanner(width: width)
-          case "landscape": adSize = landscapeInlineAdaptiveBanner(width: width)
-          default: adSize = currentOrientationInlineAdaptiveBanner(width: width)
-          }
-        }
+        let adSize = inlineAdaptiveBanner(width: width, maxHeight: maxHeight)
         return ["width": adSize.size.width, "height": adSize.size.height]
       }
     }

@@ -77,7 +77,13 @@ class BannerAd(
 ) : SharedObject(appContext) {
 
   val requestedSizeMap: Map<String, Any?> =
-    mapOf("width" to requestedSize.width, "height" to requestedSize.height)
+    mapOf(
+      "width" to requestedSize.width,
+      "height" to requestedSize.height,
+      // Kept in `ad.size` so JS sees the same three keys as on iOS, and so a size read back off
+      // an ad still round-trips into another ad as an inline adaptive request.
+      "inlineAdaptive" to requestedSize.isInlineAdaptiveBanner
+    )
 
   /**
    * Held without being placed in the view hierarchy. `BannerAdView` addViews it when

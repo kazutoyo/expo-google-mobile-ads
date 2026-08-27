@@ -116,7 +116,14 @@ final class BannerAd: SharedObject {
       if let existing = _bannerView {
         return existing
       }
-      let view = BannerView(adSize: adSizeFor(cgSize: CGSize(width: adWidth, height: adHeight)))
+      // `adSizeFor(cgSize:)` builds a *fixed* custom ad size (flags = 1). Feeding it an inline
+      // adaptive size's numbers would silently turn "up to this height" into "exactly this
+      // height", so an inline adaptive request is rebuilt through the SDK function that sets
+      // the inline flag (flags = 128) instead. See `inlineAdaptive()` in BannerAdSize.ts.
+      let adSize = isInlineAdaptive
+        ? inlineAdaptiveBanner(width: adWidth, maxHeight: adHeight)
+        : adSizeFor(cgSize: CGSize(width: adWidth, height: adHeight))
+      let view = BannerView(adSize: adSize)
       view.adUnitID = adUnitId
       view.delegate = delegateProxy
       // GMA reports paid events via a closure, not the delegate.
@@ -149,6 +156,8 @@ final class BannerAd: SharedObject {
   private let adUnitId: String
   private let adWidth: Double
   private let adHeight: Double
+  /// When true, `adHeight` is a maximum rather than a fixed height.
+  private let isInlineAdaptive: Bool
   private let requestOptions: [String: Any?]?
   private let delegateProxy = BannerAdDelegateProxy()
 
@@ -196,7 +205,14 @@ final class BannerAd: SharedObject {
     }
     self.adWidth = width
     self.adHeight = height
-    self.requestedSize = size
+    self.isInlineAdaptive = size["inlineAdaptive"] as? Bool ?? false
+    // Rebuilt rather than echoed back, so `ad.size` reports the same three keys on both
+    // platforms (Android composes this map from its `AdSize`, which cannot carry extra keys).
+    self.requestedSize = [
+      "width": width,
+      "height": height,
+      "inlineAdaptive": self.isInlineAdaptive,
+    ]
     self.adUnitId = adUnitId
     self.requestOptions = requestOptions
     super.init()

@@ -77,7 +77,9 @@ export function useBannerAd(options: BannerAdOptions): BannerAdState & { ad: Ban
     );
     loadWhenInitialized(created);
     return created;
-  }, [options.adUnitId, options.size.width, options.size.height]);
+    // `inlineAdaptive` belongs here for the same reason width/height do: it changes what the
+    // native side requests, and two sizes can share a width and height while differing on it.
+  }, [options.adUnitId, options.size.width, options.size.height, options.size.inlineAdaptive]);
 
   return { ...useBannerAdState(ad), ad };
 }

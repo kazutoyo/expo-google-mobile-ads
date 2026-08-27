@@ -5,6 +5,16 @@ import NativeModule from './ExpoGoogleMobileAdsModule';
 export type BannerAdSize = {
   readonly width: number;
   readonly height: number;
+  /**
+   * Set by `inlineAdaptive()`; `height` is then the maximum height rather than a fixed one.
+   *
+   * Both SDKs represent "inline adaptive" as a flag on their ad-size type
+   * (`GADAdSize.flags` on iOS, `AdSize.isInlineAdaptiveBanner` on Android), not as a
+   * width/height value, so it cannot be derived from the two numbers alone. Without this
+   * marker the native side rebuilds the size with `GADAdSizeFromCGSize` / `AdSize(w, h)`,
+   * which produce a *fixed* banner of exactly `height` — the request stops being adaptive.
+   */
+  readonly inlineAdaptive?: boolean;
 };
 
 export type AdaptiveOptions = {
@@ -14,10 +24,21 @@ export type AdaptiveOptions = {
   orientation?: 'current' | 'portrait' | 'landscape';
 };
 
+export type InlineAdaptiveOptions = {
+  /** In dp. Defaults to the screen width. */
+  width?: number;
+  /**
+   * Maximum height in dp. Must be at least 32dp; 50dp or more is recommended.
+   *
+   * Required — see `inlineAdaptive()` for why there is no meaningful default.
+   */
+  maxHeight: number;
+};
+
 export type BannerAdSizeSpec =
   | ({ type: 'anchoredAdaptive' } & AdaptiveOptions)
   | ({ type: 'largeAnchoredAdaptive' } & AdaptiveOptions)
-  | ({ type: 'inlineAdaptive'; maxHeight?: number } & AdaptiveOptions);
+  | ({ type: 'inlineAdaptive' } & InlineAdaptiveOptions);
 
 function screenWidth(): number {
   return Dimensions.get('window').width;
@@ -58,13 +79,29 @@ export const BannerAdSize = {
     );
   },
 
-  /** Size for an inline adaptive banner meant to sit inside scrolling content. */
-  inlineAdaptive(options: AdaptiveOptions & { maxHeight?: number } = {}): BannerAdSize {
-    return NativeModule.getInlineAdaptiveSize(
+  /**
+   * Size for an inline adaptive banner meant to sit inside scrolling content. The returned
+   * `height` is the maximum; the served ad may be shorter, and `ad.loadedSize` reports what
+   * actually arrived.
+   *
+   * `maxHeight` is required, and there is deliberately no default. The SDKs' "no max height"
+   * helpers are not representable as the concrete `{ width, height }` this type promises:
+   * iOS's `GADPortraitInlineAdaptiveBannerAdSizeWithWidth` returns height `0` as a sentinel and
+   * keeps the real bound in `GADAdSize.flags`, while Android's
+   * `getCurrentOrientationInlineAdaptiveBannerAdSize` returns the whole screen height (923dp on
+   * a Pixel 9a) — neither is a height a caller can reserve space for. Any default this function
+   * picked instead would be an arbitrary layout reservation the caller never asked for.
+   *
+   * There is no `orientation` option: unlike the anchored helpers, the max-height form of the
+   * inline adaptive size is orientation-independent on both platforms.
+   */
+  inlineAdaptive(options: InlineAdaptiveOptions): BannerAdSize {
+    const size = NativeModule.getInlineAdaptiveSize(
       options.width ?? screenWidth(),
-      options.maxHeight ?? null,
-      options.orientation ?? 'current'
+      options.maxHeight
     );
+    // Tag it here rather than in each native module: it is the same constant on both platforms.
+    return { ...size, inlineAdaptive: true };
   },
 
   resolve(spec: BannerAdSizeSpec): BannerAdSize {

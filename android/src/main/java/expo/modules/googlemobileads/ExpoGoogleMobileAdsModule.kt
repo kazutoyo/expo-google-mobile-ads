@@ -197,32 +197,37 @@ class ExpoGoogleMobileAdsModule : Module() {
       }
     }
 
-    Function("getInlineAdaptiveSize") { width: Double, maxHeight: Double?, orientation: String ->
-      runOnMain {
-        val widthPx = width.roundToInt()
-        if (maxHeight != null) {
-          // getInlineAdaptiveBannerAdSize(width, maxHeight) is a static calculation that
-          // requires no Context.
-          AdSize.getInlineAdaptiveBannerAdSize(widthPx, maxHeight.roundToInt())
-        } else {
-          val context = appContext.reactContext ?: throw Exceptions.ReactContextLost()
-          when (orientation) {
-            "portrait" -> AdSize.getPortraitInlineAdaptiveBannerAdSize(context, widthPx)
-            "landscape" -> AdSize.getLandscapeInlineAdaptiveBannerAdSize(context, widthPx)
-            else -> AdSize.getCurrentOrientationInlineAdaptiveBannerAdSize(context, widthPx)
-          }
-        }.toMap()
-      }
+    // Only the max-height form is exposed. The per-orientation helpers are, per the AAR's own
+    // bytecode, nothing but `getInlineAdaptiveBannerAdSize(width, <device height in dp>)` — a
+    // ~923dp max height on a Pixel 9a, which is not a height a caller can reserve space for.
+    // iOS cannot express that form as `{width, height}` at all. See `inlineAdaptive()` in
+    // BannerAdSize.ts.
+    //
+    // `getInlineAdaptiveBannerAdSize(width, maxHeight)` is a static calculation needing no
+    // Context, and no longer reads any UI state, so it does not need `runOnMain` either.
+    Function("getInlineAdaptiveSize") { width: Double, maxHeight: Double ->
+      AdSize.getInlineAdaptiveBannerAdSize(width.roundToInt(), maxHeight.roundToInt()).toMap()
     }
 
     Class(BannerAd::class) {
       Constructor { adUnitId: String, size: Map<String, Any?>, requestOptions: Map<String, Any?>? ->
         val width = (size["width"] as? Number)?.toInt() ?: throw InvalidBannerSizeException()
         val height = (size["height"] as? Number)?.toInt() ?: throw InvalidBannerSizeException()
+        // `AdSize(width, height)` builds a *fixed* size: its bytecode passes false for all three
+        // adaptive flags. Feeding it an inline adaptive size's numbers would silently turn "up
+        // to this height" into "exactly this height", so an inline adaptive request is rebuilt
+        // through the factory that sets `isInlineAdaptiveBanner` instead. It is static and needs
+        // no Context, so the constructor stays Activity-free. See `inlineAdaptive()` in
+        // BannerAdSize.ts.
+        val adSize = if (size["inlineAdaptive"] == true) {
+          AdSize.getInlineAdaptiveBannerAdSize(width, height)
+        } else {
+          AdSize(width, height)
+        }
         // [Android counterpart of Lesson 4] Deliberately doesn't resolve or require an
         // Activity here. The Constructor must succeed even during preload, when no Activity
         // exists yet. Activity resolution happens on every call to BannerAd.load()/ensureAdView().
-        BannerAd(appContext, adUnitId, AdSize(width, height), requestOptions)
+        BannerAd(appContext, adUnitId, adSize, requestOptions)
       }
 
       Property("size") { ad: BannerAd -> ad.requestedSizeMap }

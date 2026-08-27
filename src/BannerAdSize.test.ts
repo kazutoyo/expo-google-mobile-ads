@@ -53,14 +53,30 @@ describe('largeAnchoredAdaptive', () => {
 });
 
 describe('inlineAdaptive', () => {
-  it('passes null when maxHeight is omitted', () => {
-    BannerAdSize.inlineAdaptive({ width: 360 });
-    expect(mockNative.getInlineAdaptiveSize).toHaveBeenCalledWith(360, null, 'current');
+  it('passes the width and maxHeight through', () => {
+    BannerAdSize.inlineAdaptive({ width: 360, maxHeight: 200 });
+    expect(mockNative.getInlineAdaptiveSize).toHaveBeenCalledWith(360, 200);
   });
 
-  it('accepts maxHeight', () => {
-    BannerAdSize.inlineAdaptive({ width: 360, maxHeight: 200 });
-    expect(mockNative.getInlineAdaptiveSize).toHaveBeenCalledWith(360, 200, 'current');
+  it('uses the screen width when width is omitted', () => {
+    BannerAdSize.inlineAdaptive({ maxHeight: 200 });
+    expect(mockNative.getInlineAdaptiveSize).toHaveBeenCalledWith(390, 200);
+  });
+
+  // Without this marker the native side rebuilds a *fixed* banner of exactly `height`, which is
+  // what made an inline adaptive request stop being adaptive.
+  it('marks the size as inline adaptive', () => {
+    expect(BannerAdSize.inlineAdaptive({ width: 360, maxHeight: 200 })).toEqual({
+      width: 360,
+      height: 120,
+      inlineAdaptive: true,
+    });
+  });
+
+  it('leaves every other size unmarked', () => {
+    expect(BannerAdSize.BANNER.inlineAdaptive).toBeUndefined();
+    expect(BannerAdSize.anchoredAdaptive().inlineAdaptive).toBeUndefined();
+    expect(BannerAdSize.largeAnchoredAdaptive().inlineAdaptive).toBeUndefined();
   });
 });
 
@@ -70,6 +86,6 @@ describe('resolve', () => {
     expect(mockNative.getLargeAnchoredAdaptiveSize).toHaveBeenCalledWith(360, 'current');
 
     BannerAdSize.resolve({ type: 'inlineAdaptive', width: 360, maxHeight: 200 });
-    expect(mockNative.getInlineAdaptiveSize).toHaveBeenCalledWith(360, 200, 'current');
+    expect(mockNative.getInlineAdaptiveSize).toHaveBeenCalledWith(360, 200);
   });
 });

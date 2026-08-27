@@ -101,13 +101,17 @@ const GALLERY_SIZES: { label: string; size: BannerAdSize }[] = [
   { label: 'MEDIUM_RECTANGLE', size: BannerAdSize.MEDIUM_RECTANGLE },
   { label: 'FULL_BANNER (wider than a phone)', size: BannerAdSize.FULL_BANNER },
   { label: 'LEADERBOARD (wider than a phone)', size: BannerAdSize.LEADERBOARD },
-  {
-    label: 'inlineAdaptive (no maxHeight)',
-    size: BannerAdSize.inlineAdaptive({ width: GALLERY_WIDTH }),
-  },
+  // There is no "no maxHeight" row any more: `maxHeight` is required, because neither SDK's
+  // no-max-height inline adaptive size survives the trip through `{width, height}` (iOS returns
+  // height 0, Android the whole screen height). Two different maxHeights are exercised instead,
+  // to show the reserved box tracking the max and `loadedSize` tracking what actually arrived.
   {
     label: 'inlineAdaptive (maxHeight 100)',
     size: BannerAdSize.inlineAdaptive({ width: GALLERY_WIDTH, maxHeight: 100 }),
+  },
+  {
+    label: 'inlineAdaptive (maxHeight 250)',
+    size: BannerAdSize.inlineAdaptive({ width: GALLERY_WIDTH, maxHeight: 250 }),
   },
 ];
 
