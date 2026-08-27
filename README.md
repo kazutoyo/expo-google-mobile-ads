@@ -188,17 +188,17 @@ const size = useBannerAdSize({ type: 'largeAnchoredAdaptive' });
             "com.google.ads.mediation:pangle:7.3.0.5.0",
             "com.google.ads.mediation:unity:4.16.2.0",
             "com.google.ads.mediation:ironsource:8.9.0.0",
-            "com.google.ads.mediation:ly:5.0.0.0"
+            "com.google.ads.mediation:line:3.1.1.1"
           ],
           "androidMavenRepositories": [
             "https://artifact.bytedance.com/repository/pangle/"
           ],
           "iosPods": {
             "GoogleMobileAdsMediationAppLovin": "13.5.0.0",
-            "GoogleMobileAdsMediationPangle": "7.3.0.5.0",
+            "GoogleMobileAdsMediationPangle": "7.4.0.7.0",
             "GoogleMobileAdsMediationUnity": "4.16.2.0",
-            "GoogleMobileAdsMediationIronSource": "8.9.0.0",
-            "GoogleMobileAdsMediationLY": "5.0.0.0"
+            "GoogleMobileAdsMediationIronSource": "8.9.0.0.0",
+            "GoogleMobileAdsMediationLine": "3.0.1.2"
           }
         }
       ]
@@ -207,7 +207,17 @@ const size = useBannerAdSize({ type: 'largeAnchoredAdaptive' });
 }
 ```
 
-**バージョンは執筆時点のものであり、そのままコピーして使わないこと。** 各ネットワークの最新バージョンは [Google の Choose networks（Android Next-Gen）](https://developers.google.com/admob/android/next-gen/mediation/choose-networks) や各社のドキュメントで確認する。`androidMavenRepositories` はネットワーク固有の Maven リポジトリ（例: Pangle）が必要な場合にのみ指定する。
+**バージョンは執筆時点のものであり、そのままコピーして使わないこと。** Android と iOS はアダプタのバージョン体系が別物なので、同じネットワークでも数字が揃うとは限らない（上の例の ironSource / Pangle / LY Ads Network がそうである）。各ネットワークの最新バージョンは以下の公式ページで確認する。
+
+| ネットワーク | Android | iOS |
+|---|---|---|
+| AppLovin | [changelog](https://developers.google.com/admob/android/mediation/applovin) | [changelog](https://developers.google.com/admob/ios/mediation/applovin) |
+| Pangle | [changelog](https://developers.google.com/admob/android/mediation/pangle) | [changelog](https://developers.google.com/admob/ios/mediation/pangle) |
+| Unity Ads | [changelog](https://developers.google.com/admob/android/mediation/unity) | [changelog](https://developers.google.com/admob/ios/mediation/unity) |
+| ironSource | [changelog](https://developers.google.com/admob/android/mediation/ironsource) | [changelog](https://developers.google.com/admob/ios/mediation/ironsource) |
+| LY Ads Network（旧 LINE Ads Network） | [changelog](https://developers.google.com/admob/android/mediation/line) | [changelog](https://developers.google.com/admob/ios/mediation/line) |
+
+`androidMavenRepositories` はネットワーク固有の Maven リポジトリ（例: Pangle）が必要な場合にのみ指定する。
 
 ## バナーの自動リフレッシュ
 
