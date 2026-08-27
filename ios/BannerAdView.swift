@@ -25,11 +25,15 @@ final class BannerAdView: ExpoView {
     // 乗っているときだけ警告する。`deinit` のタイミングは不定なので、単なる再マウント
     // （古い View インスタンスがまだ解放されていないだけ）では所有権 or window のどちらかが
     // 外れており、警告は鳴らない。両方 true のときだけが本当の「同時使用」。
-    if let otherOwner = ad.currentAttachment, otherOwner !== self, bannerView.window != nil {
+    // `detachCurrentAdIfOwned()` above already cleared our own ownership, so any owner still
+    // recorded here is another view. Remember it so the ad can be handed back when we go away.
+    let otherOwner = ad.currentAttachment
+    if let otherOwner, otherOwner !== self, bannerView.window != nil {
       log.warn(
         "同じ広告が複数の BannerAdView に渡されています。最後にマウントされた View にのみ表示されます。"
       )
     }
+    ad.previousAttachment = otherOwner
     bannerView.removeFromSuperview()
     // このバージョンの ExpoView (ExpoFabricView) には `reactViewController()` が無いため、
     // `appContext.utilities.currentViewController()` で表示中の view controller を取得する。
@@ -45,6 +49,22 @@ final class BannerAdView: ExpoView {
     guard let currentAd, currentAd.currentAttachment === self else { return }
     currentAd.bannerView?.removeFromSuperview()
     currentAd.currentAttachment = nil
+    handBackToPreviousOwner(currentAd)
+  }
+
+  /// Hands an ad that just became unowned back to the view it was taken from, as long as that
+  /// view is still alive and still wants it (`currentAd === ad`). `setAd` re-runs the normal
+  /// attach path, so the reclaiming view owns and shows the banner again.
+  ///
+  /// Without this, a view that lost its ad to a second view would stay blank forever: its `ad`
+  /// prop never changes, so Fabric never calls `setAd` on it again.
+  private func handBackToPreviousOwner(_ ad: BannerAd) {
+    guard let previous = ad.previousAttachment, previous !== self, previous.currentAd === ad else {
+      return
+    }
+    // Cleared first so the re-attach below cannot bounce the ad back and forth.
+    ad.previousAttachment = nil
+    previous.setAd(ad)
   }
 
   override func layoutSubviews() {
@@ -56,14 +76,34 @@ final class BannerAdView: ExpoView {
     currentAd.bannerView?.frame = bounds
   }
 
-  // `deinit` は意図的に持たない。以前は「自分がまだ所有者なら View から外す」処理を
-  // `runOnMain` で包んで置いていたが、あれは**実行され得ない死んだコード**だった:
-  // `BannerAd.currentAttachment` は `weak` なので、解放中の `self` に対する weak 読み出しは
-  // nil を返す。つまり `currentAd.currentAttachment === self` は deinit 内では常に false で、
-  // ガードを抜けることが無かった。
-  //
-  // 消しても実害が無いのは、後始末が自動で済むため:
-  // - `bannerView` はこの View のサブビューなので、View が解放されれば superview から外れる。
-  // - `currentAttachment` は `weak` なので、この View の解放と同時に自動的に nil になる。
-  // 結果として `main.sync` の呼び出し元が 1 つ減り、それを弁護するコメントも不要になった。
+  /// `deinit` does **no** teardown — that part is still automatic and is deliberately not
+  /// re-introduced here:
+  /// - `bannerView` is this view's subview, so it leaves the hierarchy when this view is freed.
+  /// - `currentAttachment` is `weak`, so it clears itself when this view is freed.
+  ///
+  /// What `deinit` *is* good for is handing a stolen ad back. This is the only signal iOS gives
+  /// that this view is really gone: RN 0.86 never calls `prepareForRecycle` on an Expo Fabric
+  /// view (verified on the simulator — only `didMoveToWindow(window: nil)` and `deinit` fire on
+  /// unmount), and `didMoveToWindow` cannot be used because `react-native-screens` detaches
+  /// inactive screens from the window without unmounting them. It is the counterpart of
+  /// Android's `OnViewDestroys` hook.
+  ///
+  /// The old ownership check (`currentAd.currentAttachment === self`) was dead code here because
+  /// a weak read of a deallocating `self` returns nil — which is exactly what makes the handback
+  /// work: seeing no owner means the ad became unowned along with us.
+  deinit {
+    guard let ad = currentAd else { return }
+    // `deinit` is not actor-isolated and the re-attach touches UIKit, so hop to the main queue.
+    // The closure retains `ad`, which keeps the candidate view reachable until it runs.
+    DispatchQueue.main.async {
+      guard ad.currentAttachment == nil,
+            let previous = ad.previousAttachment,
+            previous.currentAd === ad
+      else {
+        return
+      }
+      ad.previousAttachment = nil
+      previous.setAd(ad)
+    }
+  }
 }

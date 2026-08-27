@@ -247,7 +247,7 @@ class ExpoGoogleMobileAdsModule : Module() {
       // window-detach teardown の代わりに、GC 任せではない決定的なタイミングで
       // 所有権を手放す。
       OnViewDestroys { view: BannerAdView ->
-        view.detachIfOwned()
+        view.onDestroy()
       }
     }
   }

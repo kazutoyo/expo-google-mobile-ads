@@ -15,18 +15,20 @@ import { BannerAdView } from './BannerAdView';
 const size = { width: 360, height: 50 };
 
 function makeAd(overrides: any = {}) {
-  return { status: 'loading', size, ...overrides } as any;
+  return { status: 'loading', size, __expo_shared_object_id__: 42, ...overrides } as any;
 }
 
 beforeEach(() => jest.clearAllMocks());
 
 describe('BannerAdView', () => {
-  it('ad をネイティブ View へ渡す', async () => {
+  // SharedObject をそのまま渡すと DEV の deepFreezeAndThrowOnMutationInDev に凍結され、
+  // 以降 release() が "failed to define internal native state property" で落ちる。
+  it('ネイティブ View へは SharedObject 本体ではなく shared object id を渡す', async () => {
     const ad = makeAd();
 
     await render(<BannerAdView ad={ad} />);
 
-    expect(mockNativeView.mock.calls[0][0]).toMatchObject({ ad });
+    expect(mockNativeView.mock.calls[0][0]).toMatchObject({ ad: 42 });
   });
 
   it('ロード前はリクエストしたサイズで領域を予約する', async () => {

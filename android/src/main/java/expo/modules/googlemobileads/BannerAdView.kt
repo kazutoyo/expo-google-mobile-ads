@@ -25,7 +25,7 @@ private const val TAG = "ExpoGoogleMobileAds"
  * removeView すると、画面へ戻ってきたときに `ad` prop の参照が変わらない限り
  * `setAd()` は再呼び出しされず（Fabric は参照が変化しないプロパティを再適用しない）、
  * 誰も再度 addView しないまま永久に空白になる。iOS 側にも window-detach 相当の
- * teardown フックは存在しない（`deinit` だけが唯一のテアダウン契機）ため、
+ * teardown フックは存在しない（本当の破棄は `prepareForRecycle()` で拾っている）ため、
  * ここでは iOS に合わせて何もしない。
  *
  * これで「本当に別の View にこの広告を奪われる」ケースの後始末が漏れることはない:
@@ -73,6 +73,8 @@ class BannerAdView(context: Context, appContext: AppContext) : ExpoView(context,
     // 乗っているときだけ警告する。GC のタイミングは不定なので、単なる再マウント
     // （古い View インスタンスがまだ回収されていないだけ）では所有権 or window の
     // どちらかが外れており、警告は鳴らない。両方 true のときだけが本当の「同時使用」。
+    // `detachIfOwned()` above already cleared our own ownership, so any owner left here is
+    // another view. Remember it so the ad can go back when we give it up.
     val otherOwner = ad.currentAttachment
     if (otherOwner != null && otherOwner !== this && view.isAttachedToWindow) {
       Log.w(
@@ -80,6 +82,7 @@ class BannerAdView(context: Context, appContext: AppContext) : ExpoView(context,
         "同じ広告が複数の BannerAdView に渡されています。最後にマウントされた View にのみ表示されます。"
       )
     }
+    ad.previousAttachment = otherOwner
     (view.parent as? ViewGroup)?.removeView(view)
     ad.currentAttachment = this
     addView(view, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
@@ -88,15 +91,42 @@ class BannerAdView(context: Context, appContext: AppContext) : ExpoView(context,
 
   /**
    * 自分がまだこの広告の所有者である場合のみ View から外す。既に別の View に奪われている
-   * 場合は何もしない（奪い返さない）。`setAd()` の再割り当て時と、`OnViewDestroys`
-   * （この View が本当に破棄されるとき、[Review fix round 3 — item 3]）の両方から呼ぶため
-   * `internal`。
+   * 場合は何もしない（奪い返さない）。`setAd()` の再割り当て時と、`onDestroy()`
+   * （この View が本当に破棄されるとき、[Review fix round 3 — item 3]）の両方から呼ぶ。
    */
-  internal fun detachIfOwned() {
+  private fun detachIfOwned() {
     val ad = currentAd ?: return
     if (ad.currentAttachment !== this) return
     ad.adView?.let { removeView(it) }
     ad.currentAttachment = null
+    handBackToPreviousOwner(ad)
+  }
+
+  /**
+   * Gives an ad that just became unowned back to the view it was taken from, as long as that view
+   * is still alive and still wants it (`currentAd === ad`). `setAd()` re-runs the normal attach
+   * path, so the reclaiming view becomes the owner again and shows the banner.
+   */
+  private fun handBackToPreviousOwner(ad: BannerAd) {
+    val previous = ad.previousAttachment ?: return
+    if (previous === this || previous.currentAd !== ad) return
+    // Cleared first so the re-attach below cannot bounce the ad back and forth.
+    ad.previousAttachment = null
+    previous.setAd(ad)
+  }
+
+  /**
+   * Called from `OnViewDestroys` (`onDropViewInstance`), the real teardown hook — it does not fire
+   * on the temporary window detaches `react-native-screens` performs during screen transitions.
+   * Giving up the ad here is what lets another still-mounted view reclaim it; dropping `currentAd`
+   * keeps a destroyed instance from being handed the ad back later. iOS does the same in
+   * `prepareForRecycle()`.
+   */
+  internal fun onDestroy() {
+    detachIfOwned()
+    val ad = currentAd ?: return
+    if (ad.previousAttachment === this) ad.previousAttachment = null
+    currentAd = null
   }
 
   override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {

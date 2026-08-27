@@ -127,6 +127,13 @@ final class BannerAd: SharedObject {
   /// View が解放されれば自動的に nil になる）。
   weak var currentAttachment: BannerAdView?
 
+  /// The view `currentAttachment` took this ad from. When the current owner gives the ad up,
+  /// it is handed back to this view if that view is still alive and still wants the ad —
+  /// otherwise a view that lost the ad to a second view would stay blank forever, because its
+  /// `ad` prop never changes and Fabric therefore never calls `setAd` on it again.
+  /// `weak` for the same reason as `currentAttachment`.
+  weak var previousAttachment: BannerAdView?
+
   /// リクエストしたサイズ。JS 側の `ad.size` になる。
   let requestedSize: [String: Any?]
 
@@ -295,6 +302,7 @@ final class BannerAd: SharedObject {
       view.paidEventHandler = nil
       view.removeFromSuperview()
       currentAttachment = nil
+      previousAttachment = nil
       // GADBannerView（UIView）の最後の強参照をここで手放すことで、UIView の解放が
       // メインスレッド上で起きるようにする。
       _bannerView = nil

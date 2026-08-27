@@ -110,6 +110,17 @@ class BannerAd(
   var currentAttachment: BannerAdView? = null
 
   /**
+   * The view `currentAttachment` took this ad from. When the current owner gives the ad up, it is
+   * handed back to this view if that view is still alive and still wants the ad — otherwise a view
+   * that lost the ad to a second view would stay blank forever, because its `ad` prop never changes
+   * and Fabric therefore never calls `setAd` on it again.
+   *
+   * A plain (strong) reference for the same reason as `currentAttachment`; it is cleared
+   * deterministically in `BannerAdView.onDestroy()`.
+   */
+  var previousAttachment: BannerAdView? = null
+
+  /**
    * `sharedObjectDidRelease()` によるテアダウンが済んだかどうか。true になったら
    * 二度と `AdView` を作り直さない。release() を呼んだスレッド（書き込み）と
    * main スレッドの `load()`（読み取り）の両方から触れるため `@Volatile`。
@@ -309,6 +320,7 @@ class BannerAd(
     // 常に実行されるようにした。
     mainHandler.post {
       currentAttachment = null
+      previousAttachment = null
       val view = adView ?: return@post
       // bannerAdRefreshCallback も adEventCallback と一緒にクリアする。
       view.getBannerAd()?.let {
