@@ -24,7 +24,7 @@ import UIKit
 /// 付随する原理的なリスクであり、`runOnMain` 固有の欠陥ではない。
 ///
 /// そのためこの `runOnMain`（＝ブロッキングな `main.sync`）を使う箇所は最小限に絞ってある。
-/// `ios/` 全体を grep した時点で、`runOnMain` の呼び出し元は次の 5 箇所（この関数の定義を
+/// `ios/` 全体を grep した時点で、`runOnMain` の呼び出し元は次の 4 箇所（この関数の定義を
 /// 除く）だけである。それぞれ「なぜ非同期にできないのか」を、根拠を持って書ける範囲でだけ書く。
 ///
 /// 1. `ExpoGoogleMobileAdsModule.swift` の `getAnchoredAdaptiveSize` /
@@ -32,25 +32,18 @@ import UIKit
 ///    JS API 上あえて同期関数にしている（呼び出し側がロード前にレイアウトを確定させるための
 ///    設計）ため非同期化できず、かつ `GADAdSize.h` がメインスレッド専用と明記しているため、
 ///    同期のまま main へ寄せる以外に手が無い。**JS スレッドが JS ランタイムを保持したまま
-///    `main.sync` に到達しうるのは、この 3 箇所だけ**である（他の 2 箇所は下記のとおり JS の
-///    同期呼び出し経路上に無い）。つまり上記の残存リスクを実際に負っているのはここだけであり、
-///    承知の上で意図的に残している。受け入れる理由は、この呼び出しが短く・純粋な数値計算
-///    だけで・JS へ再入することが無いため。
+///    `main.sync` に到達しうるのは、この 3 箇所だけ**である（残る 1 箇所は下記のとおり
+///    呼び出し元が全てメインスレッド上なので sync 分岐に入らない）。つまり上記の残存リスクを
+///    実際に負っているのはここだけであり、承知の上で意図的に残している。受け入れる理由は、
+///    この呼び出しが短く・純粋な数値計算だけで・JS へ再入することが無いため。
 /// 2. `bannerView`（下記の遅延生成プロパティ）。`BannerView?` を返す必要があるので
 ///    `DispatchQueue.main.async` にはできない。grep で確認した呼び出し元は `load()` の
 ///    `DispatchQueue.main.async` ブロック（1 箇所）と `BannerAdView` の `setAd` /
-///    `detachCurrentAdIfOwned` / `layoutSubviews` / `deinit`（`deinit` は `runOnMain` の中）
-///    だけで、いずれも既にメインスレッド上にいる（`ExpoView = ExpoFabricView` が
-///    `@MainActor` であることは `ExpoModulesCore.swiftinterface` で確認した）。
-///    したがって実際には `Thread.isMainThread` の早期リターン分岐しか実行されない。
+///    `detachCurrentAdIfOwned` / `layoutSubviews` だけで、いずれも既にメインスレッド上にいる
+///    （`ExpoView = ExpoFabricView` が `@MainActor` であることは
+///    `ExpoModulesCore.swiftinterface` で確認した）。したがって実際には
+///    `Thread.isMainThread` の早期リターン分岐しか実行されない。
 ///    （`sharedObjectWillRelease` はこのプロパティではなく `_bannerView` を直接読んでいる。）
-/// 3. `BannerAdView.deinit`（`BannerAdView.swift`）。ブロックが
-///    `currentAd.currentAttachment === self` を比較するため、解放中の `self` を escaping
-///    クロージャへ渡す `main.async` には**できない**（`runOnMain` のブロックは非 escaping
-///    なので合法）。`deinit` がメインスレッドで呼ばれる保証は無いので、ここは 2. と違って
-///    実際に `main.sync` 分岐へ入りうる。ただし `deinit` は ARC の解放時に走るのであって、
-///    同期の `Function`/`Property` の本体として JS ランタイムを保持したまま走るわけではない。
-///    上記の「JS ランタイムの奪い合い」というリスクの前提が成立しないので、1. とは別扱い。
 ///
 /// なお `main.sync` を書いてよい場所とそうでない場所の区別は「呼び出し元がロックを持っているか」
 /// では**ない**（JS ランタイム自体が競合資源なので、そのような安全性の主張はできない）。
@@ -324,6 +317,11 @@ final class BannerAd: SharedObject {
 
     stateLock.lock()
     _status = "loaded"
+    // GMA はバナーを自動リフレッシュするため、「失敗 → 成功」の遷移が普通に起きる。
+    // ここで `_error` を消さないと `status === "loaded"` なのに古い error が残り続け、
+    // `statusChange` のペイロードにもそれが乗るので、正常に表示されている広告の脇に
+    // エラー表示を出し続ける consumer が現れる。成功時は必ずクリアする。
+    _error = nil
     _loadedSize = size
     _responseInfo = info
     stateLock.unlock()

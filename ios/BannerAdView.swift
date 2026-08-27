@@ -56,15 +56,14 @@ final class BannerAdView: ExpoView {
     currentAd.bannerView?.frame = bounds
   }
 
-  deinit {
-    // 広告は破棄しない。自分がまだ所有者の場合のみ View から外す。
-    // deinit はメインスレッドで呼ばれるとは限らないため、UIKit に触れる処理は
-    // runOnMain で明示的にメインスレッドへ同期する。
-    guard let currentAd else { return }
-    runOnMain {
-      guard currentAd.currentAttachment === self else { return }
-      currentAd.bannerView?.removeFromSuperview()
-      currentAd.currentAttachment = nil
-    }
-  }
+  // `deinit` は意図的に持たない。以前は「自分がまだ所有者なら View から外す」処理を
+  // `runOnMain` で包んで置いていたが、あれは**実行され得ない死んだコード**だった:
+  // `BannerAd.currentAttachment` は `weak` なので、解放中の `self` に対する weak 読み出しは
+  // nil を返す。つまり `currentAd.currentAttachment === self` は deinit 内では常に false で、
+  // ガードを抜けることが無かった。
+  //
+  // 消しても実害が無いのは、後始末が自動で済むため:
+  // - `bannerView` はこの View のサブビューなので、View が解放されれば superview から外れる。
+  // - `currentAttachment` は `weak` なので、この View の解放と同時に自動的に nil になる。
+  // 結果として `main.sync` の呼び出し元が 1 つ減り、それを弁護するコメントも不要になった。
 }

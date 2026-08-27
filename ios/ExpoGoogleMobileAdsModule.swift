@@ -32,8 +32,23 @@ public final class ExpoGoogleMobileAdsModule: Module {
     // （同期の Function 本体は JS ランタイムを保持したまま走るため、そこからの `main.sync` は
     // 原理的にデッドロックし得る。詳細は BannerAd.swift の `runOnMain` のコメントを参照）。
     // main へ寄せる理由は GMA がメインスレッド初期化を慣習としているため。
-    // 非同期化しても `load()` との順序は崩れない: `load()` も同じメインキューへ async で
-    // 積むため、JS が setRequestConfiguration → load の順に呼べば FIFO でその順に実行される。
+    //
+    // **順序について**: GMA は `requestConfiguration`（特に `testDeviceIdentifiers`）を
+    // `start()` より前に設定することを期待する。非同期化してもこれは崩れない。JS が
+    // setRequestConfiguration → initializeAsync の順に呼ぶ限り、両者の「メインキューへの
+    // 積み込み時点」が次の順に並ぶため:
+    //   E: 下の `DispatchQueue.main.async` — JS の同期呼び出しの最中に積まれ、
+    //      `setRequestConfiguration` が JS へ返る時点でメインキューに載っている。
+    //   M: `initializeAsync` → `await startMobileAdsSDK()`（`@MainActor`）のアクターホップ。
+    //      これは `initializeAsync` の本体が走り始めて await に到達して初めて積まれるので、
+    //      どんなに早くても JS が `initializeAsync` を呼んだ後 ——つまり E より必ず後になる。
+    // メインキューは FIFO なので E → M の順に実行され、`start()` は設定済みの状態で走る。
+    // この論証は「`initializeAsync` の本体がどのキューで走るか」に依存しない（本体が仮に
+    // main 上で走ったとしても、その実行自体が E より後に積まれたブロックになるだけ）。
+    // 依存しているのは「`@MainActor` の既定 executor がメインキューへ積む」という
+    // Swift ランタイムの実装挙動 1 点だけで、これはソースまでは追っていない。
+    // 逆に、JS 側が順序を守らなければ（先に initializeAsync を呼ぶ等）保証は無い。これは
+    // ネイティブ側では閉じられない、GMA 共通の呼び出し規約。
     Function("setRequestConfiguration") { (config: [String: Any?]) in
       DispatchQueue.main.async {
         let requestConfiguration = MobileAds.shared.requestConfiguration
