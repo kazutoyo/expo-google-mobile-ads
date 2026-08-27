@@ -5,7 +5,7 @@ export { BannerAdView } from './BannerAdView';
 export type { BannerAdViewProps } from './BannerAdView';
 
 export { BannerAdSize } from './BannerAdSize';
-export type { AdaptiveOptions, BannerAdSizeSpec } from './BannerAdSize';
+export type { AdaptiveOptions, BannerAdSizeSpec, InlineAdaptiveOptions } from './BannerAdSize';
 
 export { initialize, setRequestConfiguration } from './initialization';
 
