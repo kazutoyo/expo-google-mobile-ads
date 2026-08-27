@@ -152,7 +152,6 @@ type RequestOptions = {
 };
 
 class BannerAd {
-  readonly adUnitId: string;
   readonly size: BannerAdSize;              // リクエストしたサイズ
   readonly status: 'loading' | 'loaded' | 'error';
   readonly error?: AdError;
@@ -503,7 +502,20 @@ type ResponseInfo = {
   adSourceName?: string;
   adapterResponses: AdapterResponse[];   // ウォーターフォール全段の結果
 };
+
+type AdapterResponse = {
+  adapterClassName: string;
+  latencyMillis: number;
+  adError?: { code: number; message: string; domain: string };
+};
 ```
+
+`AdapterResponse` に `description` は**含めない**。実装時に確認したところ、iOS の
+`GADAdNetworkResponseInfo` に公開された `description` プロパティが存在せず、`NSObject` の既定実装に
+落ちて無意味な文字列を返すためである。なお `InitializationStatus.adapterStatuses[].description` は
+別のフィールドで、こちらは両 OS の SDK が実際に提供するため保持している。
+
+`latencyMillis` の単位はミリ秒で両 OS 統一する（iOS の SDK は秒を返すためライブラリ側で換算する）。
 
 `responseInfo` はメディエーション運用で「どのネットワークが埋めたか / どこで落ちたか」を追う
 唯一の手段のため、**成功時（`ad.responseInfo`）と失敗時（`error.responseInfo`）の両方で公開する**。
