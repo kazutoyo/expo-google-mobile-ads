@@ -176,6 +176,8 @@ const size = useBannerAdSize({ type: 'largeAnchoredAdaptive' });
 
 This library doesn't ship a version-pinned "curated list" of mediation adapters. Adapter versions change often, and pinning them here would just become stale maintenance debt. Instead, the config plugin exposes raw hooks for the dependencies, and you specify what you need yourself.
 
+The example below uses AppLovin as a fully worked reference — a real, current Android artifact coordinate and iOS pod version you can copy as a starting point.
+
 ```json
 {
   "expo": {
@@ -186,21 +188,13 @@ This library doesn't ship a version-pinned "curated list" of mediation adapters.
           "androidAppId": "ca-app-pub-xxxx~yyyy",
           "iosAppId": "ca-app-pub-xxxx~zzzz",
           "androidDependencies": [
-            "com.google.ads.mediation:applovin:13.5.0.0",
-            "com.google.ads.mediation:pangle:7.3.0.5.0",
-            "com.google.ads.mediation:unity:4.16.2.0",
-            "com.google.ads.mediation:ironsource:8.9.0.0.0",
-            "com.google.ads.mediation:line:3.1.1.1"
+            "com.google.ads.mediation:applovin:13.6.4.0"
           ],
           "androidMavenRepositories": [
             "https://artifact.bytedance.com/repository/pangle/"
           ],
           "iosPods": {
-            "GoogleMobileAdsMediationAppLovin": "13.5.0.0",
-            "GoogleMobileAdsMediationPangle": "7.4.0.7.0",
-            "GoogleMobileAdsMediationUnity": "4.16.2.0",
-            "GoogleMobileAdsMediationIronSource": "8.9.0.0.0",
-            "GoogleMobileAdsMediationLine": "3.0.1.2"
+            "GoogleMobileAdsMediationAppLovin": "13.6.4.0"
           }
         }
       ]
@@ -209,15 +203,15 @@ This library doesn't ship a version-pinned "curated list" of mediation adapters.
 }
 ```
 
-**These versions are current as of this writing — don't copy them as-is.** Android and iOS use separate adapter versioning schemes, so the same network's numbers don't necessarily line up across platforms (ironSource, Pangle, and LY Ads Network in the example above are cases where they don't). Check each network's current version on the official pages below.
+**Versions move — don't copy one from here and forget it.** Get the current version for any network from its changelog, linked below, at the time you add it. For the other networks, add the matching artifact id (Android) or pod name (iOS) from the table with the version the changelog currently lists.
 
 | network | Android | iOS |
 |---|---|---|
-| AppLovin | [changelog](https://developers.google.com/admob/android/mediation/applovin) | [changelog](https://developers.google.com/admob/ios/mediation/applovin) |
-| Pangle | [changelog](https://developers.google.com/admob/android/mediation/pangle) | [changelog](https://developers.google.com/admob/ios/mediation/pangle) |
-| Unity Ads | [changelog](https://developers.google.com/admob/android/mediation/unity) | [changelog](https://developers.google.com/admob/ios/mediation/unity) |
-| ironSource | [changelog](https://developers.google.com/admob/android/mediation/ironsource) | [changelog](https://developers.google.com/admob/ios/mediation/ironsource) |
-| LY Ads Network (formerly LINE Ads Network) | [changelog](https://developers.google.com/admob/android/mediation/line) | [changelog](https://developers.google.com/admob/ios/mediation/line) |
+| AppLovin | `com.google.ads.mediation:applovin` ([changelog](https://developers.google.com/admob/android/mediation/applovin)) | `GoogleMobileAdsMediationAppLovin` ([changelog](https://developers.google.com/admob/ios/mediation/applovin)) |
+| Pangle | `com.google.ads.mediation:pangle` ([changelog](https://developers.google.com/admob/android/mediation/pangle)) | `GoogleMobileAdsMediationPangle` ([changelog](https://developers.google.com/admob/ios/mediation/pangle)) |
+| Unity Ads | `com.google.ads.mediation:unity` ([changelog](https://developers.google.com/admob/android/mediation/unity)) | `GoogleMobileAdsMediationUnity` ([changelog](https://developers.google.com/admob/ios/mediation/unity)) |
+| ironSource | `com.google.ads.mediation:ironsource` ([changelog](https://developers.google.com/admob/android/mediation/ironsource)) | `GoogleMobileAdsMediationIronSource` ([changelog](https://developers.google.com/admob/ios/mediation/ironsource)) |
+| LY Ads Network (formerly LINE Ads Network) | `com.google.ads.mediation:line` ([changelog](https://developers.google.com/admob/android/mediation/line)) | `GoogleMobileAdsMediationLine` ([changelog](https://developers.google.com/admob/ios/mediation/line)) |
 
 `androidMavenRepositories` is only needed when a network requires its own Maven repository (e.g. Pangle).
 

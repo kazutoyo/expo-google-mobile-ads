@@ -176,6 +176,8 @@ const size = useBannerAdSize({ type: 'largeAnchoredAdaptive' });
 
 このライブラリはメディエーションアダプタのバージョンを固定した「キュレート済みリスト」を持たない。アダプタのバージョンは頻繁に更新され、ライブラリ側で固定すると陳腐化する保守負債になるためである。代わりに config plugin に素の指定口を用意しており、必要な依存関係を自分で指定する。
 
+以下の例は AppLovin を完全な実例として使っている — そのままコピーの出発点にできる、実在する Android のアーティファクト座標と iOS の pod バージョンである。
+
 ```json
 {
   "expo": {
@@ -186,21 +188,13 @@ const size = useBannerAdSize({ type: 'largeAnchoredAdaptive' });
           "androidAppId": "ca-app-pub-xxxx~yyyy",
           "iosAppId": "ca-app-pub-xxxx~zzzz",
           "androidDependencies": [
-            "com.google.ads.mediation:applovin:13.5.0.0",
-            "com.google.ads.mediation:pangle:7.3.0.5.0",
-            "com.google.ads.mediation:unity:4.16.2.0",
-            "com.google.ads.mediation:ironsource:8.9.0.0.0",
-            "com.google.ads.mediation:line:3.1.1.1"
+            "com.google.ads.mediation:applovin:13.6.4.0"
           ],
           "androidMavenRepositories": [
             "https://artifact.bytedance.com/repository/pangle/"
           ],
           "iosPods": {
-            "GoogleMobileAdsMediationAppLovin": "13.5.0.0",
-            "GoogleMobileAdsMediationPangle": "7.4.0.7.0",
-            "GoogleMobileAdsMediationUnity": "4.16.2.0",
-            "GoogleMobileAdsMediationIronSource": "8.9.0.0.0",
-            "GoogleMobileAdsMediationLine": "3.0.1.2"
+            "GoogleMobileAdsMediationAppLovin": "13.6.4.0"
           }
         }
       ]
@@ -209,15 +203,15 @@ const size = useBannerAdSize({ type: 'largeAnchoredAdaptive' });
 }
 ```
 
-**バージョンは執筆時点のものであり、そのままコピーして使わないこと。** Android と iOS はアダプタのバージョン体系が別物なので、同じネットワークでも数字が揃うとは限らない（上の例の ironSource / Pangle / LY Ads Network がそうである）。各ネットワークの最新バージョンは以下の公式ページで確認する。
+**バージョンは動く — ここからコピーしたまま放置しないこと。** 各ネットワークの現在のバージョンは、追加する時点で下記の changelog から取得する。他のネットワークについては、下表のアーティファクト ID（Android）または pod 名（iOS）に、changelog が示す時点のバージョンを添えて追加する。
 
 | ネットワーク | Android | iOS |
 |---|---|---|
-| AppLovin | [changelog](https://developers.google.com/admob/android/mediation/applovin) | [changelog](https://developers.google.com/admob/ios/mediation/applovin) |
-| Pangle | [changelog](https://developers.google.com/admob/android/mediation/pangle) | [changelog](https://developers.google.com/admob/ios/mediation/pangle) |
-| Unity Ads | [changelog](https://developers.google.com/admob/android/mediation/unity) | [changelog](https://developers.google.com/admob/ios/mediation/unity) |
-| ironSource | [changelog](https://developers.google.com/admob/android/mediation/ironsource) | [changelog](https://developers.google.com/admob/ios/mediation/ironsource) |
-| LY Ads Network（旧 LINE Ads Network） | [changelog](https://developers.google.com/admob/android/mediation/line) | [changelog](https://developers.google.com/admob/ios/mediation/line) |
+| AppLovin | `com.google.ads.mediation:applovin` ([changelog](https://developers.google.com/admob/android/mediation/applovin)) | `GoogleMobileAdsMediationAppLovin` ([changelog](https://developers.google.com/admob/ios/mediation/applovin)) |
+| Pangle | `com.google.ads.mediation:pangle` ([changelog](https://developers.google.com/admob/android/mediation/pangle)) | `GoogleMobileAdsMediationPangle` ([changelog](https://developers.google.com/admob/ios/mediation/pangle)) |
+| Unity Ads | `com.google.ads.mediation:unity` ([changelog](https://developers.google.com/admob/android/mediation/unity)) | `GoogleMobileAdsMediationUnity` ([changelog](https://developers.google.com/admob/ios/mediation/unity)) |
+| ironSource | `com.google.ads.mediation:ironsource` ([changelog](https://developers.google.com/admob/android/mediation/ironsource)) | `GoogleMobileAdsMediationIronSource` ([changelog](https://developers.google.com/admob/ios/mediation/ironsource)) |
+| LY Ads Network（旧 LINE Ads Network） | `com.google.ads.mediation:line` ([changelog](https://developers.google.com/admob/android/mediation/line)) | `GoogleMobileAdsMediationLine` ([changelog](https://developers.google.com/admob/ios/mediation/line)) |
 
 `androidMavenRepositories` はネットワーク固有の Maven リポジトリ（例: Pangle）が必要な場合にのみ指定する。
 
