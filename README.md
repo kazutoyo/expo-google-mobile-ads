@@ -1,40 +1,42 @@
 # expo-google-mobile-ads
 
-Expo Modules ネイティブな [Google Mobile Ads (AdMob)](https://developers.google.com/admob) SDK ラッパー。現時点ではバナー広告のみをサポートする。
+*(English | [日本語](./README.ja.md))*
 
-## なぜこのライブラリか
+An Expo Modules native wrapper for the [Google Mobile Ads (AdMob)](https://developers.google.com/admob) SDK. Currently supports banner ads only.
 
-既存の `react-native-google-mobile-ads` は React Native (TurboModules) 向けであり、Old Architecture との互換を引きずっている。その制約のうち特に大きいのが **広告を先読み（プリロード）できない**ことで、広告は表示する View と一体でしか生成できない。
+## Why this library
 
-本ライブラリは Expo Modules API（`SharedObject`）の上に、広告インスタンスと表示 View を分離した設計で作られている。
+The existing `react-native-google-mobile-ads` targets React Native (TurboModules) and still carries Old Architecture compatibility baggage. The biggest cost of that: **ads can't be preloaded** — an ad can only be created together with the view that displays it.
 
-- **プリロード可能** — `createBannerAd()` は React の外、画面遷移前やアプリ起動時に呼べる。ロードは即座に始まり、View は後から付ければよい
-- **画面をまたいで再利用可能** — `<BannerAdView ad={ad} />` はアンマウント時に **破棄せずデタッチのみ**を行う。同じ広告を別の画面で再表示できる
-- **hooks ベース** — React から使うときは `useBannerAd` / `useBannerAdState` の薄いラッパーだけで済む
-- **レイアウトシフトなし** — `BannerAdSize` のサイズ計算はロード完了を待たない同期関数なので、広告が届く前に表示領域を確定できる
+This library is built on the Expo Modules API (`SharedObject`), with the ad instance and the display view deliberately kept separate.
 
-Android は [GMA Next-Gen SDK](https://developers.google.com/admob/android/next-gen/quick-start)、iOS は Google Mobile Ads SDK v13 系を使用する。
+- **Preloadable** — `createBannerAd()` can be called outside React, before a screen transition or at app startup. Loading starts immediately; the view can be attached later.
+- **Reusable across screens** — `<BannerAdView ad={ad} />` **only detaches, never destroys**, the ad on unmount. The same ad instance can be shown again on a different screen.
+- **Hooks-based** — from React, `useBannerAd` / `useBannerAdState` are thin wrappers, nothing more.
+- **No layout shift** — `BannerAdSize` computes sizes with a synchronous function that doesn't wait for a load, so the display area can be reserved before the ad arrives.
 
-## サポート範囲
+Android uses the [GMA Next-Gen SDK](https://developers.google.com/admob/android/next-gen/quick-start); iOS uses the Google Mobile Ads SDK v13.
 
-- **New Architecture 専用**。Old Architecture は対象外
-- **Expo SDK 54 以降**
-- バナー広告のみ（フェーズ1）
+## Scope
 
-未対応（今後のフェーズ）:
+- **New Architecture only.** Old Architecture is not supported.
+- **Expo SDK 54+**
+- Banner ads only (phase 1)
 
-- UMP（同意管理）— フェーズ2で別途設計する
-- インタースティシャル / リワード / アプリ起動時 / ネイティブ広告 — フェーズ3
+Not yet supported (future phases):
 
-## インストール
+- UMP (consent management) — designed separately in phase 2
+- Interstitial / rewarded / app open / native ads — phase 3
+
+## Installation
 
 ```sh
 npx expo install expo-google-mobile-ads
 ```
 
-### config plugin の設定
+### Config plugin
 
-`app.json`（または `app.config.js`）の `plugins` に AdMob の App ID を渡す。
+Pass your AdMob App IDs to the plugin's config in `app.json` (or `app.config.js`).
 
 ```json
 {
@@ -52,13 +54,13 @@ npx expo install expo-google-mobile-ads
 }
 ```
 
-plugin はビルド時に App ID の存在と形式を検証する。未設定、または広告**ユニット** ID（`ca-app-pub-xxxx/yyyy` のようにスラッシュ区切り）を App ID の場所に渡した場合は、ビルドをその場で失敗させ、原因が分かるメッセージを出す。App ID は `ca-app-pub-xxxxxxxxxxxxxxxx~xxxxxxxxxx`（チルダ区切り）の形式である。この取り違えは AdMob 初心者が最も踏みやすい落とし穴で、放置すると Google SDK 側で分かりにくいクラッシュ（iOS）や例外（Android）になる。
+The plugin validates the presence and format of the App IDs at build time. If an ID is missing, or if an ad **unit** ID (slash-separated, like `ca-app-pub-xxxx/yyyy`) is passed where an App ID belongs, the build fails immediately with a message that explains why. An App ID uses the tilde-separated form: `ca-app-pub-xxxxxxxxxxxxxxxx~xxxxxxxxxx`. This mix-up is the single most common mistake AdMob newcomers make, and left unchecked it turns into an opaque crash on iOS or exception on Android, deep inside the Google SDK.
 
-`delayAppMeasurementInit: true` を渡すと、UMP の同意取得が終わるまで計測の送信を遅らせる設定を両 OS に書き込む（フェーズ2の UMP 対応への布石）。
+Passing `delayAppMeasurementInit: true` writes a setting on both platforms that delays sending measurement data until UMP consent has been collected (groundwork for phase 2's UMP support).
 
-## SDK の初期化
+## Initializing the SDK
 
-広告をロードする前に、アプリ起動時に一度だけ `initialize()` を呼ぶ。
+Call `initialize()` once at app startup, before loading any ads.
 
 ```typescript
 import { initialize } from 'expo-google-mobile-ads';
@@ -66,18 +68,18 @@ import { initialize } from 'expo-google-mobile-ads';
 await initialize();
 ```
 
-**このライブラリは自動初期化を行わない。** 呼び出しは必ず明示的である。
+**This library never initializes itself.** The call is always explicit.
 
-理由は、初期化と UMP の同意取得の順序について Google 自身の案内が割れているため。旧来の案内は「同意取得が先」（`initialize()` がメディエーションアダプタによる広告プリロードを引き起こすため）、現行の案内は「初期化が先でよい」（初期化自体は個人データを処理せず、`canRequestAds()` が true になるまで広告をリクエストしなければポリシー準拠）としている。ここはアプリごとの法務判断が絡みうる領域であり、ネイティブ側で自動初期化してしまうと、揺れている解釈のどちらかをライブラリが勝手に選び、アプリから変更できなくなる。**この順序を決めるのはアプリであってライブラリではない。**
+The reason: Google's own guidance on the ordering of initialization versus UMP consent has shifted over time. The older guidance said consent must come first, because `initialize()` triggers ad preloading by mediation adapters; current guidance says initializing first is fine, since initialization itself doesn't process personal data and staying policy-compliant only requires not requesting ads until `canRequestAds()` is true. This is a decision that can carry legal weight for an app, and if the native side auto-initialized, the library would be silently picking one of these shifting interpretations for you, with no way for the app to override it. **The app decides this ordering, not the library.**
 
-`initialize()` が呼ばれる前に `createBannerAd()` を呼んでもエラーにはならない（ロードは初期化完了まで内部でキューされる）。ただし `initialize()`自体が一度も呼ばれない場合、広告は永久に `loading` のまま止まる。これを検知するため、`initialize()` 未呼び出しの状態で広告を作ると `__DEV__` で警告が出る。
+Calling `createBannerAd()` before `initialize()` has been called is not an error — loading is queued internally until initialization completes. But if `initialize()` is never called at all, the ad stays `loading` forever. To catch that early, creating an ad while `initialize()` hasn't run yet logs a `__DEV__` warning.
 
-## プリロード
+## Preloading
 
-広告インスタンスの生成（＝ロード開始）と、画面への表示は独立している。次の画面へ遷移する前や、アプリ起動時に広告を作っておける。
+Creating an ad instance (which starts loading) and displaying it on screen are independent. You can create an ad before a screen transition, or at app startup.
 
 ```typescript
-// 例: モジュールスコープ、または画面遷移前のどこかで
+// e.g. at module scope, or anywhere before a screen transition
 import { createBannerAd, BannerAdSize } from 'expo-google-mobile-ads';
 
 export const homeBannerAd = createBannerAd({
@@ -87,7 +89,7 @@ export const homeBannerAd = createBannerAd({
 ```
 
 ```tsx
-// 画面コンポーネント側
+// in the screen component
 import { useBannerAdState, BannerAdView } from 'expo-google-mobile-ads';
 import { homeBannerAd } from './ads';
 
@@ -98,18 +100,18 @@ function HomeScreen() {
 }
 ```
 
-`<BannerAdView>` はマウント時にネイティブ View をアタッチし、**アンマウント時はデタッチのみ**を行って広告そのものは破棄しない。この画面から離れて戻ってきても、再ロードなしに同じ広告を表示できる。広告を明示的に破棄したい場合は `ad.release()` を呼ぶ。
+`<BannerAdView>` attaches the native view on mount and **only detaches it on unmount** — the ad itself is not destroyed. Leaving this screen and coming back shows the same ad again, with no reload. To explicitly destroy an ad, call `ad.release()`.
 
-## hooks
+## Hooks
 
-2つの hook はそれぞれ広告のライフタイムに対する責務が異なる。
+The two hooks differ in what they own of the ad's lifetime.
 
-| hook | 広告を生成するか | アンマウント時に release するか |
+| hook | creates the ad | releases it on unmount |
 |---|---|---|
-| `useBannerAd(options)` | する | **する** |
-| `useBannerAdState(ad)` | しない（既存の `ad` を購読） | **しない** |
+| `useBannerAd(options)` | yes | **yes** |
+| `useBannerAdState(ad)` | no (subscribes to an existing `ad`) | **no** |
 
-画面と広告のライフタイムが一致する（プリロードしない）単純なケースでは `useBannerAd` を使う。
+For the simple case where the ad's lifetime matches the screen's (no preloading), use `useBannerAd`.
 
 ```tsx
 import { useBannerAd, BannerAdSize, BannerAdView } from 'expo-google-mobile-ads';
@@ -124,9 +126,9 @@ function Screen() {
 }
 ```
 
-プリロード済みの広告を画面で使うだけの場合は `useBannerAdState` を使う（前節の例を参照）。この hook は `ad` の生成も release も行わない。呼び出し側が `ad` のライフタイムを管理する。
+To just display a preloaded ad on a screen, use `useBannerAdState` (see the preloading example above). This hook neither creates nor releases `ad` — the caller owns its lifetime.
 
-より詳細な状態変化（インプレッション、クリック、収益イベントなど）を購読したい場合は `ad.addListener(...)` を直接使う。
+For finer-grained state changes (impressions, clicks, revenue events, and so on), subscribe directly with `ad.addListener(...)`.
 
 ```typescript
 const subscription = ad.addListener('statusChange', ({ status }) => {
@@ -142,9 +144,9 @@ const subscription = ad.addListener('statusChange', ({ status }) => {
 import { BannerAdSize } from 'expo-google-mobile-ads';
 ```
 
-固定サイズ:
+Fixed sizes:
 
-| 定数 | サイズ (dp) |
+| constant | size (dp) |
 |---|---|
 | `BannerAdSize.BANNER` | 320×50 |
 | `BannerAdSize.LARGE_BANNER` | 320×100 |
@@ -152,17 +154,17 @@ import { BannerAdSize } from 'expo-google-mobile-ads';
 | `BannerAdSize.FULL_BANNER` | 468×60 |
 | `BannerAdSize.LEADERBOARD` | 728×90 |
 
-アダプティブサイズ（いずれも同期関数。ロードを待たずに表示領域を確定できる）:
+Adaptive sizes (all synchronous functions — they resolve without waiting for a load, so the display area can be reserved ahead of time):
 
-| 関数 | 高さの範囲 | 備考 |
+| function | height range | notes |
 |---|---|---|
-| `BannerAdSize.anchoredAdaptive(options?)` | 50〜90dp | 対応するネイティブ API（Android/iOS 双方）は**非推奨**。将来の SDK メジャーで削除される可能性がある |
-| `BannerAdSize.largeAnchoredAdaptive(options?)` | 50〜150dp | `anchoredAdaptive` の後継。ポートレート高さの20%以内で、動画広告の需要が高い場合に大きめの領域を確保する |
-| `BannerAdSize.inlineAdaptive(options)` | `maxHeight` に依存 | スクロール内（フィード内など）に置くためのサイズ |
+| `BannerAdSize.anchoredAdaptive(options?)` | 50–90dp | The underlying native API (both Android and iOS) is **deprecated**. It may be removed in a future SDK major version. |
+| `BannerAdSize.largeAnchoredAdaptive(options?)` | 50–150dp | The successor to `anchoredAdaptive`. Stays within 20% of portrait height, reserving a larger area for when video ad demand is high. |
+| `BannerAdSize.inlineAdaptive(options)` | depends on `maxHeight` | For placement inside scrollable content (e.g. a feed). |
 
-`anchoredAdaptive` は非推奨のネイティブ API をラップしているが、意図して提供している。高さが低く抑えられるぶんレイアウトへの影響が小さいため、`largeAnchoredAdaptive` の大きな占有面積を避けたい場合の選択肢として残してある。TypeScript の `@deprecated` は付けていない — 意図して使う利用者に無用な警告を出さないためである。
+`anchoredAdaptive` wraps a deprecated native API, and that's intentional. Its shorter height has less impact on layout, so it's kept as an option for when you want to avoid `largeAnchoredAdaptive`'s larger footprint. It isn't marked `@deprecated` in TypeScript, so it doesn't throw an unwanted warning at anyone using it on purpose.
 
-`options` は共通で `{ width?: number; orientation?: 'current' | 'portrait' | 'landscape' }`（既定は画面幅・`'current'`）。画面回転に追従してサイズを再計算したい場合は `useBannerAdSize(spec)` hook を使う。
+`options` for both is `{ width?: number; orientation?: 'current' | 'portrait' | 'landscape' }` (defaults to screen width and `'current'`). To recompute the size when the device rotates, use the `useBannerAdSize(spec)` hook.
 
 ```typescript
 import { useBannerAdSize } from 'expo-google-mobile-ads';
@@ -170,9 +172,9 @@ import { useBannerAdSize } from 'expo-google-mobile-ads';
 const size = useBannerAdSize({ type: 'largeAnchoredAdaptive' });
 ```
 
-## メディエーション
+## Mediation
 
-このライブラリはメディエーションアダプタのバージョンを固定した「キュレート済みリスト」を持たない。アダプタのバージョンは頻繁に更新され、ライブラリ側で固定すると陳腐化する保守負債になるためである。代わりに config plugin に素の指定口を用意しており、必要な依存関係を自分で指定する。
+This library doesn't ship a version-pinned "curated list" of mediation adapters. Adapter versions change often, and pinning them here would just become stale maintenance debt. Instead, the config plugin exposes raw hooks for the dependencies, and you specify what you need yourself.
 
 ```json
 {
@@ -187,7 +189,7 @@ const size = useBannerAdSize({ type: 'largeAnchoredAdaptive' });
             "com.google.ads.mediation:applovin:13.5.0.0",
             "com.google.ads.mediation:pangle:7.3.0.5.0",
             "com.google.ads.mediation:unity:4.16.2.0",
-            "com.google.ads.mediation:ironsource:8.9.0.0",
+            "com.google.ads.mediation:ironsource:8.9.0.0.0",
             "com.google.ads.mediation:line:3.1.1.1"
           ],
           "androidMavenRepositories": [
@@ -207,40 +209,40 @@ const size = useBannerAdSize({ type: 'largeAnchoredAdaptive' });
 }
 ```
 
-**バージョンは執筆時点のものであり、そのままコピーして使わないこと。** Android と iOS はアダプタのバージョン体系が別物なので、同じネットワークでも数字が揃うとは限らない（上の例の ironSource / Pangle / LY Ads Network がそうである）。各ネットワークの最新バージョンは以下の公式ページで確認する。
+**These versions are current as of this writing — don't copy them as-is.** Android and iOS use separate adapter versioning schemes, so the same network's numbers don't necessarily line up across platforms (ironSource, Pangle, and LY Ads Network in the example above are cases where they don't). Check each network's current version on the official pages below.
 
-| ネットワーク | Android | iOS |
+| network | Android | iOS |
 |---|---|---|
 | AppLovin | [changelog](https://developers.google.com/admob/android/mediation/applovin) | [changelog](https://developers.google.com/admob/ios/mediation/applovin) |
 | Pangle | [changelog](https://developers.google.com/admob/android/mediation/pangle) | [changelog](https://developers.google.com/admob/ios/mediation/pangle) |
 | Unity Ads | [changelog](https://developers.google.com/admob/android/mediation/unity) | [changelog](https://developers.google.com/admob/ios/mediation/unity) |
 | ironSource | [changelog](https://developers.google.com/admob/android/mediation/ironsource) | [changelog](https://developers.google.com/admob/ios/mediation/ironsource) |
-| LY Ads Network（旧 LINE Ads Network） | [changelog](https://developers.google.com/admob/android/mediation/line) | [changelog](https://developers.google.com/admob/ios/mediation/line) |
+| LY Ads Network (formerly LINE Ads Network) | [changelog](https://developers.google.com/admob/android/mediation/line) | [changelog](https://developers.google.com/admob/ios/mediation/line) |
 
-`androidMavenRepositories` はネットワーク固有の Maven リポジトリ（例: Pangle）が必要な場合にのみ指定する。
+`androidMavenRepositories` is only needed when a network requires its own Maven repository (e.g. Pangle).
 
-## バナーの自動リフレッシュ
+## Banner auto-refresh
 
-GMA のバナー自動リフレッシュは **AdMob 管理画面（広告ユニットの設定）側の機能であり、SDK の API ではない**。本ライブラリはこれに一切関与しない。リフレッシュ間隔を変更したい場合は AdMob の管理画面で設定する。
+GMA's banner auto-refresh is **a setting in the AdMob console (per ad unit), not an SDK API**. This library has nothing to do with it. To change the refresh interval, use the AdMob console.
 
-## API リファレンス
+## API reference
 
-`src/index.ts` からエクスポートされるもの一覧:
+Everything exported from `src/index.ts`:
 
 ```typescript
-// バナー広告（命令型コア）
+// Banner ads (imperative core)
 export function createBannerAd(options: BannerAdOptions): BannerAd;
 export type { BannerAd, BannerAdOptions, BannerAdEvents };
 
-// 表示 View
+// Display view
 export function BannerAdView(props: BannerAdViewProps): JSX.Element;
 export type { BannerAdViewProps };
 
-// サイズユーティリティ
+// Size utilities
 export const BannerAdSize: { ... };
 export type { AdaptiveOptions, BannerAdSizeSpec };
 
-// 初期化
+// Initialization
 export function initialize(): Promise<InitializationStatus>;
 export function setRequestConfiguration(config: RequestConfiguration): void;
 
@@ -250,7 +252,7 @@ export function useBannerAdState(ad: BannerAd): BannerAdState;
 export type { BannerAdState };
 export function useBannerAdSize(spec: BannerAdSizeSpec): BannerAdSize;
 
-// 型
+// types
 export type {
   AdError,
   AdapterResponse,
@@ -263,6 +265,6 @@ export type {
 };
 ```
 
-## ライセンス
+## License
 
 MIT
