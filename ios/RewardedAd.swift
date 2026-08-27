@@ -57,13 +57,24 @@ final class FullScreenRewardedAd: FullScreenAd {
       handleLoadFailed(missingAdError())
       return
     }
-    if isReleased {
+    if shouldDiscardLoadResult {
+      // Released, a show is in flight, or this ad has already been shown. See the same guard in
+      // InterstitialAd.swift for why installing here would hang the show promise.
+      //
+      // It also closes the last latch hole: this is the only path that could have installed a new
+      // `_reward` snapshot while an earlier ad's reward handler was still able to fire, which
+      // would have returned the new ad's reward for the old ad's earn. An ad can only have been
+      // presented if `showPromise != nil` (during) or `status == "shown"` (after), and both are
+      // discarded here — so a snapshot can never be installed after any presentation.
+      //
+      // Dropping this ad is complete cleanup: its delegate and paid closure are still nil, so
+      // returning releases the last reference and ARC frees it.
       return
     }
     // Two loads can overlap (the second `load()` clears `ad`, but the first request may still land
     // afterwards), so an earlier ad can be sitting here. This clears its delegate and paid closure
-    // and — critically — resets the earned-reward latch, so no reward from a previous ad can be
-    // read out by this one.
+    // and resets the earned-reward latch. Safe here only because the guard above has ruled out a
+    // presentation in flight.
     tearDownAd()
     ad.fullScreenContentDelegate = delegateProxy
     ad.paidEventHandler = { [weak self] value in
