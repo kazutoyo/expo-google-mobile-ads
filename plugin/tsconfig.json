@@ -1,9 +1,9 @@
 {
   "compilerOptions": {
     "types": ["jest", "node"],
-    "target": "esnext",
-    "moduleResolution": "bundler",
-    "module": "esnext",
+    "target": "es2019",
+    "moduleResolution": "node10",
+    "module": "commonjs",
     "moduleDetection": "force",
     "esModuleInterop": true,
     "sourceMap": true,
