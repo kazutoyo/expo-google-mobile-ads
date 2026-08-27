@@ -6,6 +6,11 @@ type PendingTask = {
 };
 
 export type InitializationQueue = {
+  /**
+   * Records that `initialize()` was called, and clears any remembered failure: a fresh attempt
+   * re-opens the queue, so tasks arriving during the retry wait for its result instead of being
+   * failed immediately by the previous attempt's error.
+   */
   markInitializeCalled(): void;
   isInitializeCalled(): boolean;
   resolve(): void;
@@ -24,10 +29,21 @@ export function createInitializationQueue(): InitializationQueue {
   let initializeCalled = false;
   let resolved = false;
   let pending: PendingTask[] = [];
+  /**
+   * The error from the last failed initialization, boxed so that `null` means "no failure"
+   * without assuming anything about what was thrown. Cleared by `markInitializeCalled()`.
+   *
+   * Without this, a task arriving *after* the failure would just be pushed onto a queue nothing
+   * will ever drain: `isInitializeCalled()` is still true, so it gets no dev warning either, and
+   * the ad it belongs to sits on `loading` forever with no error anywhere — exactly the state
+   * `reject()` exists to prevent for the tasks queued before the failure.
+   */
+  let failure: { error: unknown } | null = null;
 
   return {
     markInitializeCalled() {
       initializeCalled = true;
+      failure = null;
     },
     isInitializeCalled() {
       return initializeCalled;
@@ -41,6 +57,7 @@ export function createInitializationQueue(): InitializationQueue {
     },
     reject(error) {
       if (resolved) return;
+      failure = { error };
       const tasks = pending;
       pending = [];
       tasks.forEach(({ onInitializationError }) => onInitializationError(error));
@@ -48,6 +65,10 @@ export function createInitializationQueue(): InitializationQueue {
     run(task, onInitializationError) {
       if (resolved) {
         task();
+        return;
+      }
+      if (failure) {
+        onInitializationError(failure.error);
         return;
       }
       pending.push({ task, onInitializationError });

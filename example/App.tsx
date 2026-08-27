@@ -113,6 +113,33 @@ const GALLERY_SIZES: { label: string; size: BannerAdSize }[] = [
     label: 'inlineAdaptive (maxHeight 250)',
     size: BannerAdSize.inlineAdaptive({ width: GALLERY_WIDTH, maxHeight: 250 }),
   },
+  // The anchored kinds in every orientation the API offers. A size only stays adaptive across
+  // the JS boundary if it carries the marker naming the exact factory it came from, orientation
+  // included — these rows are what a device probe of the rebuilt ad size's flags is read from.
+  {
+    label: 'anchoredAdaptive (current)',
+    size: BannerAdSize.anchoredAdaptive({ width: GALLERY_WIDTH }),
+  },
+  {
+    label: 'anchoredAdaptive (portrait)',
+    size: BannerAdSize.anchoredAdaptive({ width: GALLERY_WIDTH, orientation: 'portrait' }),
+  },
+  {
+    label: 'anchoredAdaptive (landscape)',
+    size: BannerAdSize.anchoredAdaptive({ width: GALLERY_WIDTH, orientation: 'landscape' }),
+  },
+  {
+    label: 'largeAnchoredAdaptive (current)',
+    size: BannerAdSize.largeAnchoredAdaptive({ width: GALLERY_WIDTH }),
+  },
+  {
+    label: 'largeAnchoredAdaptive (portrait)',
+    size: BannerAdSize.largeAnchoredAdaptive({ width: GALLERY_WIDTH, orientation: 'portrait' }),
+  },
+  {
+    label: 'largeAnchoredAdaptive (landscape)',
+    size: BannerAdSize.largeAnchoredAdaptive({ width: GALLERY_WIDTH, orientation: 'landscape' }),
+  },
 ];
 
 /**

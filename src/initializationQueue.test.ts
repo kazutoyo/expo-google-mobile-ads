@@ -57,7 +57,7 @@ describe('createInitializationQueue', () => {
     expect(onInitializationError).toHaveBeenCalledWith(error);
   });
 
-  it('only reports a rejection once, and keeps the queue open for a retry', () => {
+  it('only reports a rejection once, and re-opens the queue for a retry', () => {
     const queue = createInitializationQueue();
     const onInitializationError = jest.fn();
     const task = jest.fn();
@@ -68,13 +68,33 @@ describe('createInitializationQueue', () => {
 
     expect(onInitializationError).toHaveBeenCalledTimes(1);
 
+    // markInitializeCalled() is what re-opens the queue, so a task arriving during the retry
+    // waits for its result instead of being failed by the previous attempt's error.
+    queue.markInitializeCalled();
     const retried = jest.fn();
     queue.run(retried, noop);
+    expect(retried).not.toHaveBeenCalled();
+
     queue.resolve();
 
     expect(retried).toHaveBeenCalledTimes(1);
     // The task that was already reported as failed must not be run by the later success.
     expect(task).not.toHaveBeenCalled();
+  });
+
+  // Without this the ad sits on `loading` forever: nothing drains the queue after a failure, and
+  // isInitializeCalled() is true so there is no dev warning either.
+  it('fails a task that arrives after a rejection immediately', () => {
+    const queue = createInitializationQueue();
+    const error = new Error('boom');
+    queue.reject(error);
+
+    const task = jest.fn();
+    const onInitializationError = jest.fn();
+    queue.run(task, onInitializationError);
+
+    expect(task).not.toHaveBeenCalled();
+    expect(onInitializationError).toHaveBeenCalledWith(error);
   });
 
   it('ignores a rejection that arrives after resolve', () => {

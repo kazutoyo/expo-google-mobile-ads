@@ -173,27 +173,31 @@ class ExpoGoogleMobileAdsModule : Module() {
     // `appContext.reactContext` instead of `appContext.currentActivity`. `reactContext` is
     // effectively guaranteed to exist by the time JS can call this function at all (i.e. once a
     // React instance exists), which effectively matches iOS's "never fails" contract.
+    //
+    // Both anchored functions go through `makeAdaptiveAdSize`, the same function `BannerAd`
+    // rebuilds a size with once it has crossed the JS boundary — the size a caller lays out
+    // against and the size actually requested therefore come from the same factory call.
     Function("getAnchoredAdaptiveSize") { width: Double, orientation: String ->
       runOnMain {
         val context = appContext.reactContext ?: throw Exceptions.ReactContextLost()
-        val widthPx = width.roundToInt()
-        when (orientation) {
-          "portrait" -> AdSize.getPortraitAnchoredAdaptiveBannerAdSize(context, widthPx)
-          "landscape" -> AdSize.getLandscapeAnchoredAdaptiveBannerAdSize(context, widthPx)
-          else -> AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(context, widthPx)
-        }.toMap()
+        val kind = when (orientation) {
+          "portrait" -> BannerAdSizeKind.ANCHORED_PORTRAIT
+          "landscape" -> BannerAdSizeKind.ANCHORED_LANDSCAPE
+          else -> BannerAdSizeKind.ANCHORED
+        }
+        makeAdaptiveAdSize(context, kind, width.roundToInt(), 0).toMap()
       }
     }
 
     Function("getLargeAnchoredAdaptiveSize") { width: Double, orientation: String ->
       runOnMain {
         val context = appContext.reactContext ?: throw Exceptions.ReactContextLost()
-        val widthPx = width.roundToInt()
-        when (orientation) {
-          "portrait" -> AdSize.getLargePortraitAnchoredAdaptiveBannerAdSize(context, widthPx)
-          "landscape" -> AdSize.getLargeLandscapeAnchoredAdaptiveBannerAdSize(context, widthPx)
-          else -> AdSize.getLargeAnchoredAdaptiveBannerAdSize(context, widthPx)
-        }.toMap()
+        val kind = when (orientation) {
+          "portrait" -> BannerAdSizeKind.LARGE_ANCHORED_PORTRAIT
+          "landscape" -> BannerAdSizeKind.LARGE_ANCHORED_LANDSCAPE
+          else -> BannerAdSizeKind.LARGE_ANCHORED
+        }
+        makeAdaptiveAdSize(context, kind, width.roundToInt(), 0).toMap()
       }
     }
 
@@ -213,21 +217,14 @@ class ExpoGoogleMobileAdsModule : Module() {
       Constructor { adUnitId: String, size: Map<String, Any?>, requestOptions: Map<String, Any?>? ->
         val width = (size["width"] as? Number)?.toInt() ?: throw InvalidBannerSizeException()
         val height = (size["height"] as? Number)?.toInt() ?: throw InvalidBannerSizeException()
-        // `AdSize(width, height)` builds a *fixed* size: its bytecode passes false for all three
-        // adaptive flags. Feeding it an inline adaptive size's numbers would silently turn "up
-        // to this height" into "exactly this height", so an inline adaptive request is rebuilt
-        // through the factory that sets `isInlineAdaptiveBanner` instead. It is static and needs
-        // no Context, so the constructor stays Activity-free. See `inlineAdaptive()` in
-        // BannerAdSize.ts.
-        val adSize = if (size["inlineAdaptive"] == true) {
-          AdSize.getInlineAdaptiveBannerAdSize(width, height)
-        } else {
-          AdSize(width, height)
-        }
+        // Only a kind the native side actually understands is kept, so `ad.size` can never
+        // report a marker that would be ignored when the size is rebuilt. The `AdSize` itself is
+        // built lazily on the main thread inside BannerAd.load() — see `BannerAd.adSize`.
+        val adaptiveKind = BannerAdSizeKind.fromJsValue(size["adaptiveKind"] as? String)
         // [Android counterpart of Lesson 4] Deliberately doesn't resolve or require an
         // Activity here. The Constructor must succeed even during preload, when no Activity
         // exists yet. Activity resolution happens on every call to BannerAd.load()/ensureAdView().
-        BannerAd(appContext, adUnitId, adSize, requestOptions)
+        BannerAd(appContext, adUnitId, width, height, adaptiveKind, requestOptions)
       }
 
       Property("size") { ad: BannerAd -> ad.requestedSizeMap }

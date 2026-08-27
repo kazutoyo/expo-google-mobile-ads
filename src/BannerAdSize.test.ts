@@ -39,8 +39,12 @@ describe('anchoredAdaptive', () => {
     expect(mockNative.getAnchoredAdaptiveSize).toHaveBeenCalledWith(360, 'portrait');
   });
 
-  it('returns whatever size native returns, unchanged', () => {
-    expect(BannerAdSize.anchoredAdaptive()).toEqual({ width: 360, height: 50 });
+  it('returns the size native returns, marked with the kind it was built for', () => {
+    expect(BannerAdSize.anchoredAdaptive()).toEqual({
+      width: 360,
+      height: 50,
+      adaptiveKind: 'anchored',
+    });
   });
 });
 
@@ -49,6 +53,29 @@ describe('largeAnchoredAdaptive', () => {
     BannerAdSize.largeAnchoredAdaptive({ width: 360 });
     expect(mockNative.getLargeAnchoredAdaptiveSize).toHaveBeenCalledWith(360, 'current');
     expect(mockNative.getAnchoredAdaptiveSize).not.toHaveBeenCalled();
+  });
+});
+
+// The marker has to name the exact factory the size came from, orientation included: both SDKs'
+// anchored factories are per-orientation and return a different height for the same width, so
+// rebuilding an explicitly portrait size through the current-orientation factory on a landscape
+// device would silently retarget the request.
+describe('the adaptive marker', () => {
+  it.each([
+    ['anchoredAdaptive', 'current', 'anchored'],
+    ['anchoredAdaptive', 'portrait', 'anchoredPortrait'],
+    ['anchoredAdaptive', 'landscape', 'anchoredLandscape'],
+    ['largeAnchoredAdaptive', 'current', 'largeAnchored'],
+    ['largeAnchoredAdaptive', 'portrait', 'largeAnchoredPortrait'],
+    ['largeAnchoredAdaptive', 'landscape', 'largeAnchoredLandscape'],
+  ] as const)('%s in %s orientation is marked %s', (helper, orientation, expected) => {
+    expect(BannerAdSize[helper]({ orientation }).adaptiveKind).toBe(expected);
+  });
+
+  it('matches the orientation actually passed to native', () => {
+    const size = BannerAdSize.anchoredAdaptive({ orientation: 'landscape' });
+    expect(mockNative.getAnchoredAdaptiveSize).toHaveBeenCalledWith(390, 'landscape');
+    expect(size.adaptiveKind).toBe('anchoredLandscape');
   });
 });
 
@@ -69,14 +96,13 @@ describe('inlineAdaptive', () => {
     expect(BannerAdSize.inlineAdaptive({ width: 360, maxHeight: 200 })).toEqual({
       width: 360,
       height: 120,
-      inlineAdaptive: true,
+      adaptiveKind: 'inline',
     });
   });
 
-  it('leaves every other size unmarked', () => {
-    expect(BannerAdSize.BANNER.inlineAdaptive).toBeUndefined();
-    expect(BannerAdSize.anchoredAdaptive().inlineAdaptive).toBeUndefined();
-    expect(BannerAdSize.largeAnchoredAdaptive().inlineAdaptive).toBeUndefined();
+  it('leaves the fixed sizes unmarked', () => {
+    expect(BannerAdSize.BANNER.adaptiveKind).toBeUndefined();
+    expect(BannerAdSize.LEADERBOARD.adaptiveKind).toBeUndefined();
   });
 });
 

@@ -30,6 +30,8 @@ The card's inner width is printed on each card. `FULL_BANNER` (468dp) and `LEADE
 - [ ] `LEADERBOARD` (728x90) — wider than the card
 - [ ] `inlineAdaptive` with `maxHeight: 100` (the resolved height must not exceed it)
 - [ ] `inlineAdaptive` with `maxHeight: 250` (same, at a different max)
+- [ ] `anchoredAdaptive` in each of the three orientations (`current` / `portrait` / `landscape`)
+- [ ] `largeAnchoredAdaptive` in each of the three orientations
 
 There is no "no `maxHeight`" row any more: `maxHeight` is now required. See
 "inlineAdaptive without maxHeight" below for why, and do not add one back.
@@ -59,6 +61,38 @@ sentinel, Android's returns the whole screen height. `maxHeight` is now required
 flag now crosses the boundary, so both platforms request a genuine inline adaptive banner of
 `width x maxHeight`. Full write-up:
 `.superpowers/sdd/2026-08-27-banner-ad-api/inline-adaptive-report.md`.
+
+### The adaptive flag on the rebuilt ad size (fixed 2026-08-27)
+
+`inlineAdaptive` was only half the bug: the same marker was missing for the two *anchored*
+adaptive kinds, so those still crossed as bare `{width, height}` and were rebuilt as a fixed
+custom size. `inlineAdaptive?: boolean` has been replaced by `adaptiveKind?: BannerAdAdaptiveKind`,
+a single discriminator naming the exact factory the size came from — orientation included,
+because the anchored factories are per-orientation and return different heights.
+
+The check that matters is not "does it render" (a fixed 338x53 renders the same as an anchored
+adaptive 338x53) but "which flag does the rebuilt native ad size carry". Values observed by
+instrumenting the size reconstruction, one ad per gallery card:
+
+| `adaptiveKind` | iOS `GADAdSize.flags` | Android `isAnchored` / `isInline` / `isLargeAnchored` |
+|---|---|---|
+| absent (the 5 fixed sizes) | 0 | false / false / false |
+| `anchored`, `anchoredPortrait`, `anchoredLandscape` | 64 | true / false / false |
+| `largeAnchored`, `largeAnchoredPortrait`, `largeAnchoredLandscape` | 512 | false / false / true |
+| `inline` | 128 | false / true / false |
+
+(Android's `isAnchoredAdaptiveBanner` and `isLargeAnchoredAdaptiveBanner` are separate flags, not
+nested: the large variant sets only the second.)
+
+Before the fix every one of those except `inline` rebuilt as a fixed custom size (iOS `flags` 1,
+Android all three booleans false). Full write-up:
+`.superpowers/sdd/2026-08-27-banner-ad-api/adaptive-flag-report.md`.
+
+Why the orientation is part of the marker: `largeAnchoredLandscape` resolves to **338x80** on the
+iPhone 17 (width 338) and **347x82** on the Pixel 9a (width 347), while `largeAnchored` /
+`largeAnchoredPortrait` resolve to **338x106** / **347x108**. A three-value marker would have had
+to rebuild every anchored size through the current-orientation factory, so an explicitly
+landscape size would have been laid out at 80 and requested at 106.
 
 ## Reuse (the library's core feature)
 
@@ -129,6 +163,38 @@ Both platforms, gallery cards, after the fix. `card inner width` is 338 on the i
 
 Note the Google test ad units serve exactly the requested size, so `loadedSize` equalling the
 requested max here does not by itself prove the server was free to serve something shorter.
+
+## Run log (2026-08-27, adaptive flag fix)
+
+Re-run of the rows above plus the six new anchored-orientation cards. Every size resolved by the
+JS helper was rebuilt natively to **exactly** the same width and height, with the flags in the
+table further up.
+
+| card | iOS 26 / iPhone 17 | Android 16 / Pixel 9a |
+|---|---|---|
+| the 5 fixed sizes | showing, unchanged from the run log above | requested and rebuilt at the same size, flags all false |
+| `inlineAdaptive maxHeight 100` | showing, 338x100 / loadedSize 338x100 | rebuilt 347x100, inline flag set |
+| `inlineAdaptive maxHeight 250` | showing, 338x250 / loadedSize 338x250 | rebuilt 347x250, inline flag set |
+| `anchoredAdaptive (current)` | showing, 338x53 / 338x53 | rebuilt 347x54, anchored flag set |
+| `anchoredAdaptive (portrait)` | showing, 338x53 / 338x53 | rebuilt 347x54, anchored flag set |
+| `anchoredAdaptive (landscape)` | showing, 338x53 / 338x53 | rebuilt 347x54, anchored flag set |
+| `largeAnchoredAdaptive (current)` | showing, 338x106 / 338x106 | rebuilt 347x108, large anchored flag set |
+| `largeAnchoredAdaptive (portrait)` | showing, 338x106 / 338x106 | rebuilt 347x108, large anchored flag set |
+| `largeAnchoredAdaptive (landscape)` | showing, 338x80 / 338x80 | rebuilt 347x82, large anchored flag set |
+| preloaded `largeAnchoredAdaptive` | showing, 338x106 / 338x106 | large anchored flag set |
+| hook-created `anchoredAdaptive` | showing, 338x53 | showing (`isLoaded=true`, impression + paid fired), 347x54 |
+
+The unsubscribed `inlineAdaptive maxHeight 250` card is worth a separate note: on iOS the served
+ad came back **338x249**, one point shorter than the requested maximum, and `loadedSize` reported
+249. That is the ad-size delegate doing its job.
+
+Android caveat, stated rather than glossed over: the Pixel 9a emulator was unstable during this
+run (repeated `System UI isn't responding`, `SocketTimeoutException` on the ad requests with all
+13 gallery cards mounted at once, and two spontaneous reboots). The Android column above is read
+from the instrumented size reconstruction, which covers every card, plus the main screen's
+`anchoredAdaptive` banner reaching `isLoaded=true` with an impression. A screenshot of the six
+new anchored-orientation cards *rendering* on Android was not obtained. The fixed and inline
+rows had already been captured visually in the earlier run log.
 
 ## Run log
 

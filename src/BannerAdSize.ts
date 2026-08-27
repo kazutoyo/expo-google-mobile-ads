@@ -2,19 +2,43 @@ import { Dimensions } from 'react-native';
 
 import NativeModule from './ExpoGoogleMobileAdsModule';
 
+/**
+ * Which adaptive size factory a `BannerAdSize` came from. Absent on the fixed sizes.
+ *
+ * Both SDKs represent "adaptive" as a flag on their ad-size type (`GADAdSize.flags` on iOS,
+ * `AdSize.isAnchoredAdaptiveBanner` / `isInlineAdaptiveBanner` /
+ * `isLargeAnchoredAdaptiveBanner` on Android), not as a width/height value, so it cannot be
+ * derived from the two numbers alone. Without this marker the native side rebuilds the size
+ * with `GADAdSizeFromCGSize` / `AdSize(w, h)`, which produce a *fixed custom* banner of exactly
+ * `width x height` — Google's serving side is then told "custom 338x53" instead of "anchored
+ * adaptive", and the request stops being adaptive with nothing observable from the app.
+ *
+ * The orientation is part of the marker rather than a separate field, because the anchored
+ * factories are per-orientation on both platforms and each returns a different height for the
+ * same width. Rebuilding an explicitly portrait size through the "current orientation" factory
+ * on a landscape device would silently retarget the request — the same class of bug this marker
+ * exists to close. A bare `anchored` / `largeAnchored` means "whatever orientation the device is
+ * in", which is what `orientation: 'current'` asked for.
+ */
+export type BannerAdAdaptiveKind =
+  | 'anchored'
+  | 'anchoredPortrait'
+  | 'anchoredLandscape'
+  | 'largeAnchored'
+  | 'largeAnchoredPortrait'
+  | 'largeAnchoredLandscape'
+  | 'inline';
+
 export type BannerAdSize = {
   readonly width: number;
   readonly height: number;
   /**
-   * Set by `inlineAdaptive()`; `height` is then the maximum height rather than a fixed one.
+   * Set by the three adaptive helpers, absent on the fixed sizes. For `inline`, `height` is the
+   * maximum height rather than a fixed one.
    *
-   * Both SDKs represent "inline adaptive" as a flag on their ad-size type
-   * (`GADAdSize.flags` on iOS, `AdSize.isInlineAdaptiveBanner` on Android), not as a
-   * width/height value, so it cannot be derived from the two numbers alone. Without this
-   * marker the native side rebuilds the size with `GADAdSizeFromCGSize` / `AdSize(w, h)`,
-   * which produce a *fixed* banner of exactly `height` — the request stops being adaptive.
+   * See {@link BannerAdAdaptiveKind} for why a size cannot survive the JS boundary without it.
    */
-  readonly inlineAdaptive?: boolean;
+  readonly adaptiveKind?: BannerAdAdaptiveKind;
 };
 
 export type AdaptiveOptions = {
@@ -44,6 +68,24 @@ function screenWidth(): number {
   return Dimensions.get('window').width;
 }
 
+/**
+ * The marker for an anchored size built for `orientation`. Kept next to the calls below so the
+ * marker and the native call it describes can never drift apart.
+ */
+function anchoredKind(
+  family: 'anchored' | 'largeAnchored',
+  orientation: 'current' | 'portrait' | 'landscape'
+): BannerAdAdaptiveKind {
+  switch (orientation) {
+    case 'portrait':
+      return family === 'anchored' ? 'anchoredPortrait' : 'largeAnchoredPortrait';
+    case 'landscape':
+      return family === 'anchored' ? 'anchoredLandscape' : 'largeAnchoredLandscape';
+    default:
+      return family;
+  }
+}
+
 export const BannerAdSize = {
   BANNER: { width: 320, height: 50 } as BannerAdSize,
   LARGE_BANNER: { width: 320, height: 100 } as BannerAdSize,
@@ -65,18 +107,19 @@ export const BannerAdSize = {
    * under a separate name from largeAnchoredAdaptive is what makes that a clean removal.
    */
   anchoredAdaptive(options: AdaptiveOptions = {}): BannerAdSize {
-    return NativeModule.getAnchoredAdaptiveSize(
-      options.width ?? screenWidth(),
-      options.orientation ?? 'current'
-    );
+    const orientation = options.orientation ?? 'current';
+    const size = NativeModule.getAnchoredAdaptiveSize(options.width ?? screenWidth(), orientation);
+    return { ...size, adaptiveKind: anchoredKind('anchored', orientation) };
   },
 
   /** Size for a large anchored adaptive banner. Height ranges from 50 to 150dp. */
   largeAnchoredAdaptive(options: AdaptiveOptions = {}): BannerAdSize {
-    return NativeModule.getLargeAnchoredAdaptiveSize(
+    const orientation = options.orientation ?? 'current';
+    const size = NativeModule.getLargeAnchoredAdaptiveSize(
       options.width ?? screenWidth(),
-      options.orientation ?? 'current'
+      orientation
     );
+    return { ...size, adaptiveKind: anchoredKind('largeAnchored', orientation) };
   },
 
   /**
@@ -100,8 +143,7 @@ export const BannerAdSize = {
       options.width ?? screenWidth(),
       options.maxHeight
     );
-    // Tag it here rather than in each native module: it is the same constant on both platforms.
-    return { ...size, inlineAdaptive: true };
+    return { ...size, adaptiveKind: 'inline' };
   },
 
   resolve(spec: BannerAdSizeSpec): BannerAdSize {

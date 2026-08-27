@@ -38,7 +38,8 @@ function makeAd(overrides: any = {}) {
   const listeners = new Set<(payload: any) => void>();
   return {
     status: 'loading',
-    // release() zeroes this out; ids handed out by the registry start at 1.
+    // release() does NOT zero this out (see `isReleased` in BannerAd.ts); ids handed out by the
+    // registry start at 1, so 0 could only ever mean "never set".
     __expo_shared_object_id__: nextSharedObjectId++,
     load: jest.fn(),
     markLoadFailed: jest.fn(),

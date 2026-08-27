@@ -116,16 +116,20 @@ final class BannerAd: SharedObject {
       if let existing = _bannerView {
         return existing
       }
-      // `adSizeFor(cgSize:)` builds a *fixed* custom ad size (flags = 1). Feeding it an inline
-      // adaptive size's numbers would silently turn "up to this height" into "exactly this
-      // height", so an inline adaptive request is rebuilt through the SDK function that sets
-      // the inline flag (flags = 128) instead. See `inlineAdaptive()` in BannerAdSize.ts.
-      let adSize = isInlineAdaptive
-        ? inlineAdaptiveBanner(width: adWidth, maxHeight: adHeight)
-        : adSizeFor(cgSize: CGSize(width: adWidth, height: adHeight))
+      // `adSizeFor(cgSize:)` builds a *fixed* custom ad size (flags = 1). Feeding it an adaptive
+      // size's numbers turns "anchored adaptive" / "up to this height" into "exactly this size",
+      // so every adaptive kind is rebuilt through its own SDK factory instead. This runs on the
+      // main queue (see `runOnMain` above), which the anchored factories require.
+      // See `BannerAdAdaptiveKind` in BannerAdSize.ts.
+      let adSize = makeAdSize(adaptiveKind: adaptiveKind, width: adWidth, height: adHeight)
       let view = BannerView(adSize: adSize)
       view.adUnitID = adUnitId
       view.delegate = delegateProxy
+      // The served ad can be smaller than the requested size — for an inline adaptive banner
+      // that is the normal case, and `GADAdSize.h` says the exact size arrives through this
+      // delegate and via `intrinsicContentSize`. Without it, `loadedSize` would keep reporting
+      // the requested maximum while Android reports what actually arrived.
+      view.adSizeDelegate = delegateProxy
       // GMA reports paid events via a closure, not the delegate.
       view.paidEventHandler = { [weak self] value in
         self?.emit(event: "paid", payload: [
@@ -156,8 +160,9 @@ final class BannerAd: SharedObject {
   private let adUnitId: String
   private let adWidth: Double
   private let adHeight: Double
-  /// When true, `adHeight` is a maximum rather than a fixed height.
-  private let isInlineAdaptive: Bool
+  /// The JS-side `BannerAdSize.adaptiveKind`, or nil for a fixed size. For `"inline"`,
+  /// `adHeight` is a maximum rather than a fixed height.
+  private let adaptiveKind: String?
   private let requestOptions: [String: Any?]?
   private let delegateProxy = BannerAdDelegateProxy()
 
@@ -205,14 +210,19 @@ final class BannerAd: SharedObject {
     }
     self.adWidth = width
     self.adHeight = height
-    self.isInlineAdaptive = size["inlineAdaptive"] as? Bool ?? false
-    // Rebuilt rather than echoed back, so `ad.size` reports the same three keys on both
-    // platforms (Android composes this map from its `AdSize`, which cannot carry extra keys).
-    self.requestedSize = [
-      "width": width,
-      "height": height,
-      "inlineAdaptive": self.isInlineAdaptive,
-    ]
+    // Only a kind the native side actually understands is kept, so `ad.size` can never report a
+    // marker that would be ignored when the size is rebuilt.
+    let kind = size["adaptiveKind"] as? String
+    self.adaptiveKind = BannerAdSizeKind(rawValue: kind ?? "") != nil ? kind : nil
+    // Rebuilt rather than echoed back, so `ad.size` reports the same keys on both platforms
+    // (Android composes this map from its own fields, which cannot carry extra keys). The key is
+    // omitted rather than set to nil for a fixed size, so JS sees `undefined` — matching the
+    // optional `adaptiveKind` in the TypeScript type on both platforms.
+    var requestedSize: [String: Any?] = ["width": width, "height": height]
+    if let adaptiveKind = self.adaptiveKind {
+      requestedSize["adaptiveKind"] = adaptiveKind
+    }
+    self.requestedSize = requestedSize
     self.adUnitId = adUnitId
     self.requestOptions = requestOptions
     super.init()
@@ -360,16 +370,55 @@ final class BannerAd: SharedObject {
   // MARK: - BannerViewDelegate callbacks (forwarded from BannerAdDelegateProxy)
   // GMA always calls these callbacks on the main thread, so no extra main hop is needed.
 
+  /// The size the ad actually came back as, which can be smaller than the requested one.
+  ///
+  /// `GADAdSize.h` states that for an inline adaptive banner "the exact size of the ad returned
+  /// is passed through the banner's ad size delegate and is indicated by the banner's
+  /// intrinsicContentSize" — `adSize` on its own keeps reporting the requested maximum, which is
+  /// what used to make iOS's `loadedSize` diverge from Android's (Android reads `getAdSize()`
+  /// off the *loaded* ad). `intrinsicContentSize` is a plain `UIView` property, so a view that
+  /// does not override it answers `UIView.noIntrinsicMetric` (-1) on both axes; that, and any
+  /// other non-positive answer, falls back to `adSize`.
+  private func servedSize(of bannerView: BannerView) -> CGSize {
+    let intrinsic = bannerView.intrinsicContentSize
+    if intrinsic.width > 0, intrinsic.height > 0 {
+      return intrinsic
+    }
+    return bannerView.adSize.size
+  }
+
+  /// `loadedSize` is typed `BannerAdSize` on the JS side, and a `BannerAdSize` without its
+  /// adaptive marker rebuilds as a *fixed custom* request. Carrying the requested kind through
+  /// keeps `useBannerAd({ size: ad.loadedSize })` an adaptive request instead of silently
+  /// degrading it. The requested kind is the right value to report: it is what the served size
+  /// was chosen against, and it is the only form that reproduces this ad's request.
+  private func loadedSizeMap(_ size: CGSize) -> [String: Any?] {
+    var map: [String: Any?] = ["width": size.width, "height": size.height]
+    if let adaptiveKind {
+      map["adaptiveKind"] = adaptiveKind
+    }
+    return map
+  }
+
+  /// Called before the banner resizes itself to the size the ad actually came back as.
+  /// Recorded (and announced) here so `loadedSize` reports the served size even when it arrives
+  /// without a fresh `bannerViewDidReceiveAd:` — for example when an auto-refreshed creative is
+  /// a different height.
+  fileprivate func handleWillChangeAdSize(_ adSize: AdSize) {
+    let size = loadedSizeMap(adSize.size)
+    stateLock.lock()
+    _loadedSize = size
+    stateLock.unlock()
+    emitStatusChange()
+  }
+
   fileprivate func handleDidReceiveAd(_ bannerView: BannerView) {
     // Do the GMA-touching work (reading `adSize`/`responseInfo`, and walking
     // `adNetworkInfoArray` to build a dictionary in `responseInfoToDictionary`) outside the
     // lock, up front. `stateLock` is taken from the Property getter on every JS render, so we
     // don't want to interleave arbitrary GMA work and allocation with that. The lock is only
     // taken for the assignment itself.
-    let size: [String: Any?] = [
-      "width": bannerView.adSize.size.width,
-      "height": bannerView.adSize.size.height,
-    ]
+    let size = loadedSizeMap(servedSize(of: bannerView))
     let info = responseInfoToDictionary(bannerView.responseInfo)
 
     stateLock.lock()
@@ -402,9 +451,14 @@ final class BannerAd: SharedObject {
 /// `BannerViewDelegate` (an ObjC protocol) requires `NSObjectProtocol`, so `BannerAd`
 /// (a `SharedObject`, which doesn't inherit from `NSObject`) can't conform to it directly.
 /// This NSObject-based proxy forwards whatever events it receives to `owner`'s `handle...`
-/// methods.
-private final class BannerAdDelegateProxy: NSObject, BannerViewDelegate {
+/// methods. It doubles as the `AdSizeDelegate` (also an ObjC protocol, so the same constraint
+/// applies).
+private final class BannerAdDelegateProxy: NSObject, BannerViewDelegate, AdSizeDelegate {
   weak var owner: BannerAd?
+
+  func adView(_ bannerView: BannerView, willChangeAdSizeTo size: AdSize) {
+    owner?.handleWillChangeAdSize(size)
+  }
 
   func bannerViewDidReceiveAd(_ bannerView: BannerView) {
     owner?.handleDidReceiveAd(bannerView)

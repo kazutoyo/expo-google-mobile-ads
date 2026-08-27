@@ -82,26 +82,32 @@ public final class ExpoGoogleMobileAdsModule: Module {
     // synchronously waiting on the JS runtime at that instant) is the same as documented in
     // the `runOnMain` comment in BannerAd.swift, and is accepted for the same reasons: the
     // call is short, purely numeric, and never re-enters JS.
+    //
+    // All three go through `makeAdaptiveAdSize`, the same function `BannerAd` rebuilds a size
+    // with once it has crossed the JS boundary — the size a caller lays out against and the size
+    // actually requested therefore come from the same factory call.
     Function("getAnchoredAdaptiveSize") { (width: Double, orientation: String) -> [String: Any] in
       runOnMain {
-        let adSize: AdSize
+        let kind: BannerAdSizeKind
         switch orientation {
-        case "portrait": adSize = portraitAnchoredAdaptiveBanner(width: width)
-        case "landscape": adSize = landscapeAnchoredAdaptiveBanner(width: width)
-        default: adSize = currentOrientationAnchoredAdaptiveBanner(width: width)
+        case "portrait": kind = .anchoredPortrait
+        case "landscape": kind = .anchoredLandscape
+        default: kind = .anchored
         }
+        let adSize = makeAdaptiveAdSize(kind: kind, width: width, maxHeight: 0)
         return ["width": adSize.size.width, "height": adSize.size.height]
       }
     }
 
     Function("getLargeAnchoredAdaptiveSize") { (width: Double, orientation: String) -> [String: Any] in
       runOnMain {
-        let adSize: AdSize
+        let kind: BannerAdSizeKind
         switch orientation {
-        case "portrait": adSize = largePortraitAnchoredAdaptiveBanner(width: width)
-        case "landscape": adSize = largeLandscapeAnchoredAdaptiveBanner(width: width)
-        default: adSize = largeAnchoredAdaptiveBanner(width: width)
+        case "portrait": kind = .largeAnchoredPortrait
+        case "landscape": kind = .largeAnchoredLandscape
+        default: kind = .largeAnchored
         }
+        let adSize = makeAdaptiveAdSize(kind: kind, width: width, maxHeight: 0)
         return ["width": adSize.size.width, "height": adSize.size.height]
       }
     }
@@ -116,7 +122,7 @@ public final class ExpoGoogleMobileAdsModule: Module {
     // inside `runOnMain` for consistency with the other two: it is a short numeric call.
     Function("getInlineAdaptiveSize") { (width: Double, maxHeight: Double) -> [String: Any] in
       runOnMain {
-        let adSize = inlineAdaptiveBanner(width: width, maxHeight: maxHeight)
+        let adSize = makeAdaptiveAdSize(kind: .inline, width: width, maxHeight: maxHeight)
         return ["width": adSize.size.width, "height": adSize.size.height]
       }
     }

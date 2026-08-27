@@ -26,7 +26,7 @@ describe('useBannerAdSize', () => {
   it('returns the size matching the spec', async () => {
     const { result } = await renderHook(() => useBannerAdSize({ type: 'largeAnchoredAdaptive' }));
 
-    expect(result.current).toEqual({ width: 390, height: 100 });
+    expect(result.current).toEqual({ width: 390, height: 100, adaptiveKind: 'largeAnchored' });
   });
 
   it('recalculates when the screen width changes', async () => {

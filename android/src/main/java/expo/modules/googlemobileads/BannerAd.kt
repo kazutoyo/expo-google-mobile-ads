@@ -1,5 +1,6 @@
 package expo.modules.googlemobileads
 
+import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -72,18 +73,37 @@ private data class LoadState(
 class BannerAd(
   appContext: AppContext,
   private val adUnitId: String,
-  private val requestedSize: AdSize,
+  private val requestedWidth: Int,
+  private val requestedHeight: Int,
+  /** The JS-side `BannerAdSize.adaptiveKind`, or null for a fixed size. */
+  private val adaptiveKind: BannerAdSizeKind?,
   private val requestOptions: Map<String, Any?>?
 ) : SharedObject(appContext) {
 
-  val requestedSizeMap: Map<String, Any?> =
-    mapOf(
-      "width" to requestedSize.width,
-      "height" to requestedSize.height,
-      // Kept in `ad.size` so JS sees the same three keys as on iOS, and so a size read back off
-      // an ad still round-trips into another ad as an inline adaptive request.
-      "inlineAdaptive" to requestedSize.isInlineAdaptiveBanner
-    )
+  val requestedSizeMap: Map<String, Any?> = buildMap {
+    put("width", requestedWidth)
+    put("height", requestedHeight)
+    // Kept in `ad.size` so JS sees the same keys as on iOS, and so a size read back off an ad
+    // still round-trips into another ad as the same adaptive request. Omitted rather than set to
+    // null for a fixed size, so JS sees `undefined` on both platforms, matching the optional
+    // `adaptiveKind` in the TypeScript type.
+    adaptiveKind?.let { put("adaptiveKind", it.jsValue) }
+  }
+
+  /**
+   * The `AdSize` the request is built from, resolved once on first [load].
+   *
+   * Deliberately not built in the constructor, mirroring iOS's lazy `bannerView`: the anchored
+   * adaptive factories read screen metrics, and the constructor runs synchronously on the JS
+   * thread during a React render. Building it here means the resolution happens on the main
+   * thread that [load] already posts to, instead of adding another blocking JS-thread-to-main
+   * hop. Only ever touched from that main-thread Runnable, so it needs no synchronization.
+   *
+   * Resolved once and cached rather than per load, so a retry after a rotation cannot request a
+   * different size from the one `ad.size` told the caller to reserve space for (`useBannerAdSize`
+   * recreates the ad on rotation, which is what re-resolves it).
+   */
+  private var adSize: AdSize? = null
 
   /**
    * Held without being placed in the view hierarchy. `BannerAdView` addViews it when
@@ -206,7 +226,13 @@ class BannerAd(
       state = state.copy(status = "loading", error = null)
       emitStatusChange()
 
-      val request = BannerAdRequest.Builder(adUnitId, requestedSize)
+      // `AdSize(width, height)` builds a *fixed* size: its bytecode passes false for all three
+      // adaptive flags. Feeding it an adaptive size's numbers silently turns "anchored adaptive"
+      // / "up to this height" into "exactly this size", so every adaptive kind is rebuilt through
+      // its own factory instead. See `BannerAdAdaptiveKind` in BannerAdSize.ts.
+      val adSize = this.adSize ?: resolveAdSize(view.context).also { this.adSize = it }
+
+      val request = BannerAdRequest.Builder(adUnitId, adSize)
         .applyRequestOptions(requestOptions)
         .build()
 
@@ -221,6 +247,29 @@ class BannerAd(
     }
   }
 
+  /** Main thread only — see [adSize]. `view.context` is the Activity the AdView was created with. */
+  private fun resolveAdSize(context: Context): AdSize =
+    if (adaptiveKind == null) {
+      AdSize(requestedWidth, requestedHeight)
+    } else {
+      makeAdaptiveAdSize(context, adaptiveKind, requestedWidth, requestedHeight)
+    }
+
+  /**
+   * `loadedSize` is typed `BannerAdSize` on the JS side, and a `BannerAdSize` without its
+   * adaptive marker rebuilds as a *fixed custom* request. Carrying the requested kind through
+   * keeps `useBannerAd({ size: ad.loadedSize })` an adaptive request instead of silently
+   * degrading it. The requested kind is reported rather than one derived from the loaded
+   * `AdSize`'s three booleans, because those cannot say which orientation the size was built for
+   * — and because it is the requested kind that reproduces this ad's request. Matches iOS's
+   * `loadedSizeMap`.
+   */
+  private fun loadedSizeMap(size: AdSize): Map<String, Any?> = buildMap {
+    put("width", size.width)
+    put("height", size.height)
+    adaptiveKind?.let { put("adaptiveKind", it.jsValue) }
+  }
+
   /**
    * [Review fix — C2] Common handling for both an initial successful load and a successful
    * auto-refresh. The Next-Gen SDK's auto-refresh doesn't "update the same `GmaBannerAd`
@@ -231,11 +280,10 @@ class BannerAd(
    * callback argument, so the latest instance must be re-fetched from `AdView.getBannerAd()`).
    */
   private fun onAdReady(ad: GmaBannerAd) {
-    val size = ad.getAdSize()
     state = state.copy(
       status = "loaded",
       error = null,
-      loadedSize = mapOf("width" to size.width, "height" to size.height),
+      loadedSize = loadedSizeMap(ad.getAdSize()),
       responseInfo = ad.getResponseInfo().toMap()
     )
 

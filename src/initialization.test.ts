@@ -67,20 +67,44 @@ describe('initialize', () => {
   // A task queued *before* the failure has already been told the SDK failed, so it isn't run
   // again by a later success — it's the ad's owner's call whether to retry. A task queued after
   // the failure still runs on the retry.
-  it('runs tasks queued after a failure once a re-initialization succeeds', async () => {
+  // An ad created *after* a failed initialize() used to be pushed onto a queue nothing would
+  // ever drain: it got no load, no error, and no dev warning (isInitializeCalled() is true), so
+  // it sat on `loading` forever — the exact state reject() exists to prevent for the ads queued
+  // before the failure.
+  it('reports the failure immediately to a task queued after it', async () => {
+    const failure = new Error('boom');
+    mockNative.initializeAsync.mockRejectedValueOnce(failure);
+    await expect(initialize()).rejects.toThrow('boom');
+
+    const afterFailure = jest.fn();
+    const onInitializationError = jest.fn();
+    runWhenInitialized(afterFailure, onInitializationError);
+
+    expect(afterFailure).not.toHaveBeenCalled();
+    expect(onInitializationError).toHaveBeenCalledWith(failure);
+  });
+
+  it('runs tasks queued during a re-initialization once it succeeds', async () => {
     mockNative.initializeAsync.mockRejectedValueOnce(new Error('boom'));
     const beforeFailure = jest.fn();
     runWhenInitialized(beforeFailure, jest.fn());
     await expect(initialize()).rejects.toThrow('boom');
     expect(beforeFailure).not.toHaveBeenCalled();
 
-    const afterFailure = jest.fn();
-    runWhenInitialized(afterFailure, jest.fn());
-
+    // The retry re-opens the queue, so this one waits for its result rather than being failed
+    // by the previous attempt's error.
     mockNative.initializeAsync.mockResolvedValueOnce(status);
-    await initialize();
+    const retry = initialize();
+    const duringRetry = jest.fn();
+    const onInitializationError = jest.fn();
+    runWhenInitialized(duringRetry, onInitializationError);
+    expect(duringRetry).not.toHaveBeenCalled();
+    expect(onInitializationError).not.toHaveBeenCalled();
 
-    expect(afterFailure).toHaveBeenCalledTimes(1);
+    await retry;
+
+    expect(duringRetry).toHaveBeenCalledTimes(1);
+    // The task that was already reported as failed must not be run by the later success.
     expect(beforeFailure).not.toHaveBeenCalled();
   });
 });
