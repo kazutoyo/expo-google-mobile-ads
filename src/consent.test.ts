@@ -1,3 +1,16 @@
+import NativeModule from './ExpoGoogleMobileAdsModule';
+import {
+  ConsentError,
+  gatherConsent,
+  getConsentInfo,
+  requestConsentInfoUpdate,
+  resetConsent,
+  showConsentFormIfRequired,
+  showPrivacyOptionsForm,
+} from './consent';
+import { UNKNOWN_CONSENT_INFO, getConsentInfoSnapshot, __resetForTesting } from './consentStore';
+import type { ConsentInfo } from './types';
+
 jest.mock('./ExpoGoogleMobileAdsModule', () => ({
   __esModule: true,
   default: {
@@ -9,23 +22,6 @@ jest.mock('./ExpoGoogleMobileAdsModule', () => ({
     resetConsentAsync: jest.fn(),
   },
 }));
-
-import NativeModule from './ExpoGoogleMobileAdsModule';
-import {
-  ConsentError,
-  gatherConsent,
-  getConsentInfo,
-  requestConsentInfoUpdate,
-  resetConsent,
-  showConsentFormIfRequired,
-  showPrivacyOptionsForm,
-} from './consent';
-import {
-  UNKNOWN_CONSENT_INFO,
-  getConsentInfoSnapshot,
-  __resetForTesting,
-} from './consentStore';
-import type { ConsentInfo } from './types';
 
 const mockNative = NativeModule as jest.Mocked<typeof NativeModule>;
 
@@ -49,9 +45,21 @@ beforeEach(() => {
 
 describe.each([
   ['gatherConsent', () => gatherConsent(), () => mockNative.gatherConsentAsync],
-  ['requestConsentInfoUpdate', () => requestConsentInfoUpdate(), () => mockNative.requestConsentInfoUpdateAsync],
-  ['showConsentFormIfRequired', () => showConsentFormIfRequired(), () => mockNative.showConsentFormIfRequiredAsync],
-  ['showPrivacyOptionsForm', () => showPrivacyOptionsForm(), () => mockNative.showPrivacyOptionsFormAsync],
+  [
+    'requestConsentInfoUpdate',
+    () => requestConsentInfoUpdate(),
+    () => mockNative.requestConsentInfoUpdateAsync,
+  ],
+  [
+    'showConsentFormIfRequired',
+    () => showConsentFormIfRequired(),
+    () => mockNative.showConsentFormIfRequiredAsync,
+  ],
+  [
+    'showPrivacyOptionsForm',
+    () => showPrivacyOptionsForm(),
+    () => mockNative.showPrivacyOptionsFormAsync,
+  ],
   ['getConsentInfo', () => getConsentInfo(), () => mockNative.getConsentInfoAsync],
 ] as const)('%s', (_name, call, nativeFn) => {
   it('calls its native function exactly once and resolves with what it returned', async () => {
