@@ -1,0 +1,10 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "paths": {
+      "expo-google-mobile-ads": ["../src/index"],
+      "expo-google-mobile-ads/*": ["../src/*"]
+    }
+  }
+}
