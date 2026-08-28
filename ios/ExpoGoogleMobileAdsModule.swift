@@ -127,6 +127,76 @@ public final class ExpoGoogleMobileAdsModule: Module {
       }
     }
 
+    // MARK: - UMP consent
+    //
+    // All six take a `Promise` and hop to `@MainActor` in a `Task` rather than being `async`
+    // functions, so the rejection can carry a normalized `code` string: expo-modules-core's
+    // `Promise.reject(_:_:)` is the only path that gets a code across to JS, and an `async`
+    // function's thrown error does not.
+    //
+    // The view controller is resolved at call time, never cached: at preload there may be none.
+    // Unlike Android there is no `noActivity` failure here — `loadAndPresentIfRequired(from:)`
+    // accepts nil and falls back to the top view controller of the main window, and if that is
+    // unusable the SDK itself reports `invalidViewController` (9).
+
+    AsyncFunction("gatherConsentAsync") { (options: [String: Any?]?, promise: Promise) in
+      Task { @MainActor in
+        do {
+          try await Consent.requestInfoUpdate(options)
+          try await Consent.showFormIfRequired(from: self.appContext?.utilities?.currentViewController())
+          promise.resolve(Consent.snapshot())
+        } catch let error as NSError {
+          promise.reject(consentErrorCode(error), consentErrorMessage(error))
+        }
+      }
+    }
+
+    AsyncFunction("requestConsentInfoUpdateAsync") { (options: [String: Any?]?, promise: Promise) in
+      Task { @MainActor in
+        do {
+          try await Consent.requestInfoUpdate(options)
+          promise.resolve(Consent.snapshot())
+        } catch let error as NSError {
+          promise.reject(consentErrorCode(error), consentErrorMessage(error))
+        }
+      }
+    }
+
+    AsyncFunction("showConsentFormIfRequiredAsync") { (promise: Promise) in
+      Task { @MainActor in
+        do {
+          try await Consent.showFormIfRequired(from: self.appContext?.utilities?.currentViewController())
+          promise.resolve(Consent.snapshot())
+        } catch let error as NSError {
+          promise.reject(consentErrorCode(error), consentErrorMessage(error))
+        }
+      }
+    }
+
+    AsyncFunction("showPrivacyOptionsFormAsync") { (promise: Promise) in
+      Task { @MainActor in
+        do {
+          try await Consent.showPrivacyOptionsForm(from: self.appContext?.utilities?.currentViewController())
+          promise.resolve(Consent.snapshot())
+        } catch let error as NSError {
+          promise.reject(consentErrorCode(error), consentErrorMessage(error))
+        }
+      }
+    }
+
+    AsyncFunction("getConsentInfoAsync") { (promise: Promise) in
+      Task { @MainActor in
+        promise.resolve(Consent.snapshot())
+      }
+    }
+
+    AsyncFunction("resetConsentAsync") { (promise: Promise) in
+      Task { @MainActor in
+        Consent.reset()
+        promise.resolve(Consent.snapshot())
+      }
+    }
+
     Class(BannerAd.self) {
       Constructor { (adUnitId: String, size: [String: Any?], requestOptions: [String: Any?]?) throws -> BannerAd in
         try BannerAd(adUnitId: adUnitId, size: size, requestOptions: requestOptions)
