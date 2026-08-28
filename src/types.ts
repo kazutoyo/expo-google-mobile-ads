@@ -74,6 +74,9 @@ export type AdReward = {
  * anywhere in the Next-Gen SDK), so asking the SDK is not an option, and deciding it
  * ourselves makes both platforms behave identically.
  *
+ * `notLoaded` also covers an ad that has been released: it can never be shown again, and it is
+ * not `alreadyShown` because releasing an ad says nothing about whether it was ever presented.
+ *
  * `failedToShow` comes from the SDK's own presentation failure callback.
  */
 export type ShowAdErrorCode = 'notLoaded' | 'alreadyShown' | 'failedToShow';

@@ -53,25 +53,28 @@ class RewardedAd(
    */
   private val earnedReward = AtomicReference<Map<String, Any?>?>(null)
 
-  override fun loadAd(request: AdRequest) {
+  override fun loadAd(request: AdRequest, loadId: Long) {
     GmaRewardedAd.load(
       request,
       object : AdLoadCallback<GmaRewardedAd> {
+        // `loadId` is captured here for the same reason as in InterstitialAd.kt: the SDK gives a
+        // result no identity of its own.
         override fun onAdLoaded(ad: GmaRewardedAd) {
-          postToMain { onAdReady(ad) }
+          postToMain { onAdReady(ad, loadId) }
         }
 
         override fun onAdFailedToLoad(adError: LoadAdError) {
-          postToMain { handleLoadFailed(adError) }
+          postToMain { handleLoadFailed(adError, loadId) }
         }
       }
     )
   }
 
   /** Main thread. */
-  private fun onAdReady(loaded: GmaRewardedAd) {
-    if (shouldDiscardLoadResult) {
-      // Released, a show is in flight, or this ad has already been shown. See the same guard in
+  private fun onAdReady(loaded: GmaRewardedAd, loadId: Long) {
+    if (isStaleLoadResult(loadId) || shouldDiscardLoadResult) {
+      // Superseded by a later `load()`, or the object can no longer accept any result: released, a
+      // show is in flight, or this ad has already been shown. See the same guard in
       // InterstitialAd.kt for why installing here would hang the show promise — and note that the
       // ad destroyed is the one that just arrived, never the one that is presenting.
       //
@@ -83,9 +86,11 @@ class RewardedAd(
       loaded.destroy()
       return
     }
-    // Clears and destroys any previous ad and — critically — resets `earnedReward`, so no reward
-    // recorded for an earlier ad can be read out by this one. Safe only because the guard above
-    // has ruled out a presentation in flight.
+    // Nothing should be here: `load()` tears the previous ad down before it bumps the load id, and
+    // only the current id reaches this line. Kept unconditional because what it clears matters —
+    // any previous ad (which would leak without `destroy()`) and, critically, `earnedReward`, so no
+    // reward recorded for an earlier ad can be read out by this one. Safe only because the guard
+    // above has ruled out a presentation in flight.
     tearDownAd()
     loaded.adEventCallback = object : RewardedAdEventCallback {
       override fun onAdShowedFullScreenContent() = handleShowed()

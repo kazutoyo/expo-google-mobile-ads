@@ -79,6 +79,23 @@ export function loadFullScreenAdWhenInitialized(ad: FullScreenAdLike): void {
  * Google's own policy guidance warns against. Check `isLoaded` and skip the ad instead.
  */
 export function assertShowable(ad: FullScreenAdLike): void {
+  // Checked before `ad.status` is read, because reading it is what throws: every property getter
+  // on a released shared object raises `SharedObject.NotFoundException`, and that raw exception
+  // would escape `show()` instead of the documented `ShowAdError`. A caller can legitimately still
+  // hold an ad it just released — phase 1's `useBannerAdState` guards the same way — so this is a
+  // reachable state, not a misuse that deserves an undocumented error type.
+  //
+  // The code is `notLoaded` rather than `alreadyShown` or a fourth member: a released ad may never
+  // have been shown, so `alreadyShown` would be untrue, while `notLoaded` is exactly what it is —
+  // an ad that is not in a state where it can be shown, decided in JS before anything reaches the
+  // SDK, which is the line `ShowAdErrorCode` already draws between `notLoaded`/`alreadyShown` and
+  // `failedToShow`. The message carries the part the code cannot.
+  if (isFullScreenAdReleased(ad)) {
+    throw new ShowAdError(
+      'notLoaded',
+      'The ad was released and can no longer be shown. Create a new one.'
+    );
+  }
   const status = ad.status;
   if (status === 'loaded') return;
   if (status === 'shown') {

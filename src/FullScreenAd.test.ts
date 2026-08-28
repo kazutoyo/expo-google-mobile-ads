@@ -61,6 +61,20 @@ describe('assertShowable', () => {
     );
   });
 
+  // Regression: `assertShowable` used to read `ad.status` first, so a released ad threw the raw
+  // `SharedObject.NotFoundException` from the property getter instead of a `ShowAdError`.
+  it('a released ad is notLoaded, not a raw SharedObject.NotFoundException', () => {
+    let thrown: unknown;
+    try {
+      assertShowable(makeReleasedAd());
+    } catch (e) {
+      thrown = e;
+    }
+    expect(thrown).toBeInstanceOf(ShowAdError);
+    expect(thrown).toEqual(expect.objectContaining({ code: 'notLoaded' }));
+    expect((thrown as Error).message).toContain('released');
+  });
+
   it('the thrown error is a ShowAdError with a message naming the status', () => {
     try {
       assertShowable(makeAd('loading'));

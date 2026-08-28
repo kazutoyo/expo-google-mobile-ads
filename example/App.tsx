@@ -509,17 +509,23 @@ function FullScreenSection({ onBack }: { onBack: () => void }) {
     );
   };
 
-  // Item B: force a load result to land *during* a presentation.
+  // Item B: force an overlapping load result to be discarded rather than recorded.
   //
   // A second `load()` cannot be started while a show is in flight (`load()` refuses), so the
   // second request has to be issued *before* the show. Two loads are started 150ms apart —
-  // shorter than a real load takes — and the ad is shown the instant the first one lands, from
-  // the statusChange handler itself. The other request then completes while the ad is on
-  // screen, which is the only way to reach `shouldDiscardLoadResult`.
+  // shorter than a real load takes — and the ad is shown the instant one of them lands, from the
+  // statusChange handler itself.
   //
-  // What proves the guard held: the presenting ad still dismisses, `show()` still resolves,
-  // `status` stays `shown` with NO further statusChange, and `responseInfo.responseId` is
-  // unchanged after dismissal (an installed result would have replaced it).
+  // **Two different guards can fire here, and which one does depends on delivery order.** The
+  // second `load()` supersedes the first, so if the first request's result arrives after that it
+  // is discarded as stale (`isStaleLoadResult`) — before the presentation, which is why the ad
+  // that gets shown is the second request's. If instead a result arrives while the ad is on
+  // screen, `shouldDiscardLoadResult` catches it. Both log a line at debug level saying which.
+  //
+  // What proves a guard held, whichever one fired: the presenting ad still dismisses, `show()`
+  // still resolves, `status` stays `shown` with NO further statusChange, and
+  // `responseInfo.responseId` is unchanged after dismissal (an installed result would have
+  // replaced it).
   const handleOverlappingLoad = () => {
     qaLog(
       `overlap: arming. status=${readStatus(overlappingLoadAd)} responseId=${responseId(overlappingLoadAd)}`
@@ -616,8 +622,15 @@ function FullScreenSection({ onBack }: { onBack: () => void }) {
             onPress={handleOverlappingLoad}
           />
           <Button
-            title="show() twice in one tick (expect the 2nd to reject failedToShow)"
+            title={`show() twice in one tick (expect the 2nd to reject failedToShow)${
+              hookInterstitial.isLoaded ? '' : ' — waiting for the hook interstitial to load'
+            }`}
             onPress={handleDoubleShow}
+            // Disabled until the ad is loaded, because otherwise this button does not test what it
+            // claims: `assertShowable` would reject BOTH calls with `notLoaded` in JS, neither one
+            // would reach native, and the native `failedToShow` path the button exists to exercise
+            // would never run. QA item C-1 reads this button as evidence for that path.
+            disabled={!hookInterstitial.isLoaded}
           />
           <Button
             title="Force an SDK presentation failure on a shown ad"

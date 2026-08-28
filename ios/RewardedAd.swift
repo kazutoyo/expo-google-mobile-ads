@@ -38,27 +38,30 @@ final class FullScreenRewardedAd: FullScreenAd {
     return _reward
   }
 
-  override func loadAd(request: Request) {
+  override func loadAd(request: Request, loadId: Int) {
+    // `loadId` is captured for the same reason as in InterstitialAd.swift: GMA gives a result no
+    // identity of its own.
     RewardedAd.load(with: adUnitId, request: request) { [weak self] ad, error in
       // Hopped to main for the same reason as the interstitial: the load completion handler is
       // not documented as main-thread, and everything below is main-thread state.
       DispatchQueue.main.async {
-        self?.handleLoadCompletion(ad: ad, error: error)
+        self?.handleLoadCompletion(ad: ad, error: error, loadId: loadId)
       }
     }
   }
 
-  private func handleLoadCompletion(ad: RewardedAd?, error: Error?) {
+  private func handleLoadCompletion(ad: RewardedAd?, error: Error?, loadId: Int) {
     if let error {
-      handleLoadFailed(error)
+      handleLoadFailed(error, loadId: loadId)
       return
     }
     guard let ad else {
-      handleLoadFailed(missingAdError())
+      handleLoadFailed(missingAdError(), loadId: loadId)
       return
     }
-    if shouldDiscardLoadResult {
-      // Released, a show is in flight, or this ad has already been shown. See the same guard in
+    if isStaleLoadResult(loadId) || shouldDiscardLoadResult {
+      // Superseded by a later `load()`, or the object can no longer accept any result: released, a
+      // show is in flight, or this ad has already been shown. See the same guard in
       // InterstitialAd.swift for why installing here would hang the show promise.
       //
       // It also closes the last latch hole: this is the only path that could have installed a new
@@ -71,10 +74,10 @@ final class FullScreenRewardedAd: FullScreenAd {
       // returning releases the last reference and ARC frees it.
       return
     }
-    // Two loads can overlap (the second `load()` clears `ad`, but the first request may still land
-    // afterwards), so an earlier ad can be sitting here. This clears its delegate and paid closure
-    // and resets the earned-reward latch. Safe here only because the guard above has ruled out a
-    // presentation in flight.
+    // Nothing should be here: `load()` tears the previous ad down before it bumps the load id, and
+    // only the current id reaches this line. Kept unconditional because what it clears matters —
+    // any previous ad's delegate and paid closure, and the earned-reward latch. Safe here only
+    // because the guard above has ruled out a presentation in flight.
     tearDownAd()
     ad.fullScreenContentDelegate = delegateProxy
     ad.paidEventHandler = { [weak self] value in

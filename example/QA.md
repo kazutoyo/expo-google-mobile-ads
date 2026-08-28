@@ -243,17 +243,26 @@ Run the items in the order given — several of them depend on the ad reaching `
       `ios/RewardedAd.swift` / `earnedReward.set(earned)` in `android/…/RewardedAd.kt`, rebuild,
       watch a rewarded ad to the end, and confirm `show()` resolves `null` even though
       `earnedReward` fired. **Revert and rebuild afterwards**, and confirm the reward comes back.
-- [ ] B. **A load that lands during a presentation is discarded** (`shouldDiscardLoadResult`).
-      "Overlapping load during a presentation" starts two loads 150 ms apart and presents the ad
-      the instant the first lands, so the other request completes while the ad is on screen. The
-      presenting ad must still dismiss, `show()` must still resolve, the events must still arrive,
-      and `status` must stay `shown` with an unchanged `responseId` and no further `statusChange`.
+- [ ] B. **An overlapping load result is discarded, never recorded.** "Overlapping load during a
+      presentation" starts two loads 150 ms apart and presents the ad the instant one lands, so the
+      other request settles either just before or during the presentation. Which guard catches it
+      depends on delivery order — `isStaleLoadResult` if the first request's result arrives after
+      the second `load()` superseded it, `shouldDiscardLoadResult` if a result arrives while the ad
+      is on screen — and both log which at debug level (`Discarding a stale load result: …` /
+      `Discarding a load result: …`). Either way: the presenting ad must still dismiss, `show()`
+      must still resolve, the events must still arrive, and `status` must stay `shown` with an
+      unchanged `responseId` and no further `statusChange`.
 - [ ] C. **A presentation failure rejects instead of hanging, and does not disturb `status`.** Two
       routes:
       - "show() twice in one tick": both calls pass the JS `status === 'loaded'` gate, so the second
         reaches native and is rejected as "already presenting" → `failedToShow`, with `message`
         "This ad is already being presented." byte-identical on both platforms. The first must
-        still resolve on dismissal.
+        still resolve on dismissal. The button is disabled until the hook interstitial is loaded —
+        on an unloaded ad `assertShowable` rejects *both* calls with `notLoaded` before either
+        reaches native, which looks like a failure of this item but is really the JS guard doing
+        its job. **Check the message, not just the code**: only "This ad is already being
+        presented." evidences the native path; "The ad is not ready to show (status: …)" means the
+        ad was not loaded and the item was not exercised.
       - "Force an SDK presentation failure on a shown ad": calls the internal `showAsync()` on an
         already-shown ad, bypassing the JS guard, so the SDK itself refuses it
         (`AdAlreadyUsed` / `AD_REUSED`). **`status` must stay `shown`** — no `status -> error` line
