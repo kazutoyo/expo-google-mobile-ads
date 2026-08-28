@@ -3,6 +3,7 @@ package expo.modules.googlemobileads
 import android.app.Activity
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import com.google.android.libraries.ads.mobile.sdk.common.AdRequest
 import com.google.android.libraries.ads.mobile.sdk.common.AdValue
 import com.google.android.libraries.ads.mobile.sdk.common.FullScreenContentError
@@ -15,6 +16,8 @@ import expo.modules.kotlin.sharedobjects.SharedObject
 import java.util.concurrent.atomic.AtomicReference
 
 private val mainHandler = Handler(Looper.getMainLooper())
+
+private const val TAG = "ExpoGoogleMobileAds"
 
 /**
  * The `status`/`error`/`responseInfo` triple, bundled into one immutable snapshot behind a single
@@ -169,7 +172,21 @@ abstract class FullScreenAd(
    * [markLoadFailed].
    */
   protected val shouldDiscardLoadResult: Boolean
-    get() = isReleased || showPromise.get() != null || state.status == "shown"
+    get() {
+      val discard = isReleased || showPromise.get() != null || state.status == "shown"
+      if (discard) {
+        // Debug-level only: lets a QA run observe this branch actually firing instead of inferring
+        // it from timing (see `qa-findings-fix-report.md`, finding 3 — the earlier evidence for "a
+        // load landing during a presentation is discarded" was a network-timing inference, not a
+        // direct observation of this branch).
+        Log.d(
+          TAG,
+          "Discarding a load result: isReleased=$isReleased " +
+            "showPromise=${showPromise.get() != null} status=${state.status}"
+        )
+      }
+      return discard
+    }
 
   /** Subclass hook. Starts the SDK-side load; called on the main thread. */
   protected abstract fun loadAd(request: AdRequest)

@@ -1,6 +1,13 @@
 import ExpoModulesCore
 import GoogleMobileAds
 import UIKit
+import os
+
+/// Debug-level only: lets a QA run observe `shouldDiscardLoadResult` actually firing instead of
+/// inferring it from timing (see `qa-findings-fix-report.md`, finding 3 — the Android evidence for
+/// "a load landing during a presentation is discarded" was a network-timing inference, not a
+/// direct observation of the discard branch).
+private let discardLogger = Logger(subsystem: "ExpoGoogleMobileAds", category: "FullScreenAd")
 
 /// Shared base for the two full-screen formats (interstitial and rewarded).
 ///
@@ -177,7 +184,16 @@ class FullScreenAd: SharedObject {
   ///
   /// Read on the main thread from both subclasses' `handleLoadCompletion`.
   var shouldDiscardLoadResult: Bool {
-    isReleased || showPromise != nil || status == "shown"
+    let currentlyReleased = isReleased
+    let currentlyPresenting = showPromise != nil
+    let currentStatus = status
+    let discard = currentlyReleased || currentlyPresenting || currentStatus == "shown"
+    if discard {
+      discardLogger.debug(
+        "Discarding a load result: isReleased=\(currentlyReleased), showPromise=\(currentlyPresenting), status=\(currentStatus)"
+      )
+    }
+    return discard
   }
 
   /// Subclass hook. What `showAsync()` resolves with on dismissal. Interstitial resolves with
