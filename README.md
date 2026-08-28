@@ -26,12 +26,12 @@ Android uses the [GMA Next-Gen SDK](https://developers.google.com/admob/android/
   (`ExpoModulesCore` declares `:ios => '16.4'` from SDK 56 on), not from the ads SDK — Google
   Mobile Ads SDK v13 only needs iOS 13. An app whose `ios.deploymentTarget` is lower than 16.4
   cannot install this pod.
-- Banner, interstitial, and rewarded ads
+- Banner, interstitial, and rewarded ads (phases 1–2)
 
 Not yet supported:
 
-- UMP (consent management)
-- Native ads
+- UMP (consent management) — phase 3
+- Native ads — phase 4
 - App-open ads
 - Server-side verification for rewarded ads
 
@@ -63,7 +63,7 @@ Pass your AdMob App IDs to the plugin's config in `app.json` (or `app.config.js`
 
 The plugin validates the presence and format of the App IDs at build time. If an ID is missing, or if an ad **unit** ID (slash-separated, like `ca-app-pub-xxxx/yyyy`) is passed where an App ID belongs, the build fails immediately with a message that explains why. An App ID uses the tilde-separated form: `ca-app-pub-xxxxxxxxxxxxxxxx~xxxxxxxxxx`. This mix-up is the single most common mistake AdMob newcomers make, and left unchecked it turns into an opaque crash on iOS or exception on Android, deep inside the Google SDK.
 
-Passing `delayAppMeasurementInit: true` writes a setting on both platforms that delays sending measurement data until UMP consent has been collected (groundwork for phase 2's UMP support).
+Passing `delayAppMeasurementInit: true` writes a setting on both platforms that delays sending measurement data until UMP consent has been collected (groundwork for phase 3's UMP support).
 
 ## Initializing the SDK
 
