@@ -14,14 +14,19 @@ import {
 import {
   BannerAdSize,
   BannerAdView,
+  ConsentError,
   ShowAdError,
   createBannerAd,
   createInterstitialAd,
   createRewardedAd,
+  gatherConsent,
   initialize,
+  resetConsent,
+  showPrivacyOptionsForm,
   useBannerAd,
   useBannerAdSize,
   useBannerAdState,
+  useConsentInfo,
   useInterstitialAd,
   useRewardedAd,
   type BannerAd,
@@ -52,10 +57,13 @@ const HORIZONTAL_INSET = CARD_PADDING + CONTENT_PADDING;
 // "unmount while initialize() is in flight" item).
 const INITIALIZE_DELAY_MS = 0;
 
-// Initialize on app start and preload an ad outside of React.
+// Correct order: gather consent first, and only initialize (and load ads) once the result says
+// ads can be requested. `startInitialization` is called from `ConsentSection`'s
+// `onCanRequestAds` below, not on app start.
 //
-// When testing the "initialization order" QA items, edit this by hand:
-//   - comment it out to check that the __DEV__ warning fires
+// When testing the "initialization order" QA items, edit this by hand (after completing the
+// consent flow, since that's what triggers the call now):
+//   - comment out the call inside `beginInitializationOnce` to check that the __DEV__ warning fires
 //   - set INITIALIZE_DELAY_MS above to check it still loads after the delay
 function startInitialization() {
   initialize().then(
@@ -64,10 +72,17 @@ function startInitialization() {
   );
 }
 
-if (INITIALIZE_DELAY_MS > 0) {
-  setTimeout(startInitialization, INITIALIZE_DELAY_MS);
-} else {
-  startInitialization();
+// Guards against calling initialize() more than once: `onCanRequestAds` can fire again after
+// "Reset consent (dev only)" walks the flow through a second time.
+let initializationStarted = false;
+function beginInitializationOnce() {
+  if (initializationStarted) return;
+  initializationStarted = true;
+  if (INITIALIZE_DELAY_MS > 0) {
+    setTimeout(startInitialization, INITIALIZE_DELAY_MS);
+  } else {
+    startInitialization();
+  }
 }
 
 // Preloading happens before any View exists (outside React), so we can't measure the
@@ -651,6 +666,69 @@ function FullScreenSection({ onBack }: { onBack: () => void }) {
   );
 }
 
+/**
+ * The consent flow, laid out the way an app should actually do it: gather consent first, and only
+ * initialize the ads SDK if the result permits ads.
+ */
+function ConsentSection({ onCanRequestAds }: { onCanRequestAds: () => void }) {
+  const { status, canRequestAds, isConsentFormAvailable, privacyOptionsRequirement } =
+    useConsentInfo();
+  const [error, setError] = useState<string | undefined>();
+  const [busy, setBusy] = useState(false);
+
+  async function run(action: () => Promise<unknown>) {
+    setBusy(true);
+    setError(undefined);
+    try {
+      await action();
+    } catch (e) {
+      setError(e instanceof ConsentError ? `${e.code}: ${e.message}` : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <View style={styles.card}>
+      <Text style={styles.bold}>Consent (UMP)</Text>
+      <Text>status: {status}</Text>
+      <Text>canRequestAds: {String(canRequestAds)}</Text>
+      <Text>isConsentFormAvailable: {String(isConsentFormAvailable)}</Text>
+      <Text>privacyOptionsRequirement: {privacyOptionsRequirement}</Text>
+      {error ? <Text style={styles.error}>{error}</Text> : null}
+
+      <Button
+        title="Gather consent (EEA debug)"
+        disabled={busy}
+        onPress={() =>
+          run(async () => {
+            const info = await gatherConsent({ debugSettings: { geography: 'eea' } });
+            if (info.canRequestAds) onCanRequestAds();
+          })
+        }
+      />
+      <Button
+        title="Gather consent (outside EEA)"
+        disabled={busy}
+        onPress={() =>
+          run(async () => {
+            const info = await gatherConsent({ debugSettings: { geography: 'other' } });
+            if (info.canRequestAds) onCanRequestAds();
+          })
+        }
+      />
+      {privacyOptionsRequirement === 'required' ? (
+        <Button
+          title="Privacy options"
+          disabled={busy}
+          onPress={() => run(showPrivacyOptionsForm)}
+        />
+      ) : null}
+      <Button title="Reset consent (dev only)" disabled={busy} onPress={() => run(resetConsent)} />
+    </View>
+  );
+}
+
 export default function App() {
   const [screen, setScreen] = useState<'a' | 'b'>('a');
   const [remountKey, setRemountKey] = useState(0);
@@ -687,6 +765,7 @@ export default function App() {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
+        <ConsentSection onCanRequestAds={beginInitializationOnce} />
         <Button title="Show the banner size gallery" onPress={() => setShowGallery(true)} />
         <Button
           title="Show the full-screen ad QA screen"
@@ -749,4 +828,5 @@ const styles = StyleSheet.create({
   outline: { borderWidth: 1, borderColor: '#f00' },
   bold: { fontWeight: 'bold' },
   log: { fontSize: 11, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
+  error: { color: '#c00' },
 });
