@@ -3,6 +3,46 @@
 Run on both iOS Simulator and Android Emulator.
 Use the test App ID / ad unit IDs (never a production ID).
 
+## UMP consent
+
+The consent flow must run before ad initialization: `gatherConsent()` first, then
+`initialize()` only if the result's `canRequestAds` is `true`. The example wires this up in
+`ConsentSection`, rendered above the ad sections; its "Gather consent" buttons are what starts
+`initialize()` (see `beginInitializationOnce` in `App.tsx`) — so items in the sections below now
+depend on completing one of items 1-8 here first.
+
+- [ ] 1. Immediately after launch, `useConsentInfo()` shows `status: unknown`,
+      `canRequestAds: false`, and `privacyOptionsRequirement: unknown`, and the "Privacy
+      options" button does **not** appear
+- [ ] 2. "Gather consent (EEA debug)" shows the consent form (if it doesn't appear, add the test
+      device ID printed in the log to `testDeviceIds` and retry)
+- [ ] 3. Consenting sets `status: obtained` and `canRequestAds: true`; `initialize()` then
+      succeeds and ads load
+- [ ] 4. Restarting the app resets `useConsentInfo()` to `status: unknown` (it does not hydrate
+      from the SDK's persisted consent on mount) — then tapping "Gather consent (EEA debug)"
+      again returns `status: obtained` **with no form shown**, proving the native-side consent
+      survived the restart even though the hook's on-screen value did not
+- [ ] 5. The "Privacy options" button appears only when `privacyOptionsRequirement: required`
+- [ ] 6. "Privacy options" reopens the form, and choosing either option there resolves without
+      error (none of `useConsentInfo()`'s fields are expected to change based on which choice
+      was made — they report whether consent is needed, not what was chosen)
+- [ ] 7. **Makes items 2-6 repeatable**: after "Reset consent (dev only)", item 2's form appears
+      again (without this, a device can only be walked through the flow once, since the SDK
+      persists consent)
+- [ ] 8. "Gather consent (outside EEA)" shows no form; `status` becomes `notRequired` and
+      `canRequestAds: true`
+- [ ] 9. **Error-code normalization**: with Airplane Mode on, "Gather consent (EEA debug)"
+      produces an error whose text starts with `network:` on **both iOS and Android**, even
+      though the underlying native codes differ (iOS 3, Android 2) — confirming they normalize
+      to the same `ConsentErrorCode`. The message ends with `(native code: N)`. Run this on both
+      platforms; record the actual `(native code: N)` seen on each
+- [ ] 10. **Not reachable from this example app**: `noActivity` only occurs on a consent call
+      issued before any Activity has ever existed (a preload-time condition), not on a call made
+      after backgrounding an app that already has one — React Native's `currentActivity` isn't
+      nulled by `onPause`, so a background-then-tap does not reproduce it here. Do not spend time
+      trying to trigger this from the UI; it would need a consent call from module-scope code
+      (like the ad-preload path) to be reachable at all
+
 ## Basics
 
 - [ ] After launch, the preloaded banner (`largeAnchoredAdaptive`) shows

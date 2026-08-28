@@ -31,14 +31,32 @@ export { useInterstitialAd, useInterstitialAdState } from './hooks/useInterstiti
 export type { FullScreenAdState } from './hooks/useInterstitialAd';
 export { useRewardedAd, useRewardedAdState } from './hooks/useRewardedAd';
 
+export {
+  ConsentError,
+  gatherConsent,
+  getConsentInfo,
+  requestConsentInfoUpdate,
+  resetConsent,
+  showConsentFormIfRequired,
+  showPrivacyOptionsForm,
+} from './consent';
+
+export { useConsentInfo } from './hooks/useConsentInfo';
+
 export type {
   AdError,
   AdReward,
   AdapterResponse,
   BannerAdStatus,
+  ConsentErrorCode,
+  ConsentInfo,
+  ConsentRequestOptions,
+  ConsentStatus,
+  DebugGeography,
   FullScreenAdStatus,
   InitializationStatus,
   PaidEventValue,
+  PrivacyOptionsRequirementStatus,
   RequestConfiguration,
   RequestOptions,
   ResponseInfo,
