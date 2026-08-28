@@ -156,6 +156,56 @@ public final class ExpoGoogleMobileAdsModule: Module {
       // "clicked" | "paid", ...)` keeps working fine as-is.
     }
 
+    // The JS-facing names are given explicitly because the Swift classes are named
+    // `FullScreenInterstitialAd` / `FullScreenRewardedAd`: GMA's own types already claim
+    // `InterstitialAd` and `RewardedAd` via NS_SWIFT_NAME, and a same-named type in this module
+    // would shadow them everywhere.
+    //
+    // As with `Class(BannerAd.self)`, `Events(...)` is not used: `EventsDefinition` doesn't
+    // conform to `ClassDefinitionElement` in this expo-modules-core version, and `emit` needs no
+    // pre-registration.
+    Class("InterstitialAd", FullScreenInterstitialAd.self) {
+      Constructor { (adUnitId: String, requestOptions: [String: Any?]?) -> FullScreenInterstitialAd in
+        FullScreenInterstitialAd(adUnitId: adUnitId, requestOptions: requestOptions)
+      }
+
+      Property("status") { (ad: FullScreenInterstitialAd) in ad.status }
+      Property("error") { (ad: FullScreenInterstitialAd) in ad.error }
+      Property("responseInfo") { (ad: FullScreenInterstitialAd) in ad.responseInfo }
+
+      Function("load") { (ad: FullScreenInterstitialAd) in ad.load() }
+      // @internal, called only by the JS side's deferred-load helper when initialize() fails.
+      Function("markLoadFailed") { (ad: FullScreenInterstitialAd, message: String) in
+        ad.markLoadFailed(message)
+      }
+      // Takes the promise rather than being `async`, because it is settled later by a delegate
+      // callback (dismissal or presentation failure), not by this function returning.
+      AsyncFunction("showAsync") { (ad: FullScreenInterstitialAd, promise: Promise) in
+        ad.showAsync(promise)
+      }
+    }
+
+    Class("RewardedAd", FullScreenRewardedAd.self) {
+      Constructor { (adUnitId: String, requestOptions: [String: Any?]?) -> FullScreenRewardedAd in
+        FullScreenRewardedAd(adUnitId: adUnitId, requestOptions: requestOptions)
+      }
+
+      Property("status") { (ad: FullScreenRewardedAd) in ad.status }
+      Property("error") { (ad: FullScreenRewardedAd) in ad.error }
+      Property("responseInfo") { (ad: FullScreenRewardedAd) in ad.responseInfo }
+      // What the ad offers, readable before it is shown. Not a signal that anything was earned —
+      // see the latch comment in RewardedAd.swift.
+      Property("reward") { (ad: FullScreenRewardedAd) in ad.reward }
+
+      Function("load") { (ad: FullScreenRewardedAd) in ad.load() }
+      Function("markLoadFailed") { (ad: FullScreenRewardedAd, message: String) in
+        ad.markLoadFailed(message)
+      }
+      AsyncFunction("showAsync") { (ad: FullScreenRewardedAd, promise: Promise) in
+        ad.showAsync(promise)
+      }
+    }
+
     View(BannerAdView.self) {
       Prop("ad") { (view: BannerAdView, ad: BannerAd?) in
         view.setAd(ad)

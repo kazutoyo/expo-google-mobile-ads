@@ -2,7 +2,7 @@
 
 *(English | [日本語](./README.ja.md))*
 
-An Expo Modules native wrapper for the [Google Mobile Ads (AdMob)](https://developers.google.com/admob) SDK. Currently supports banner ads only.
+An Expo Modules native wrapper for the [Google Mobile Ads (AdMob)](https://developers.google.com/admob) SDK. Currently supports banner, interstitial, and rewarded ads.
 
 ## Why this library
 
@@ -26,12 +26,14 @@ Android uses the [GMA Next-Gen SDK](https://developers.google.com/admob/android/
   (`ExpoModulesCore` declares `:ios => '16.4'` from SDK 56 on), not from the ads SDK — Google
   Mobile Ads SDK v13 only needs iOS 13. An app whose `ios.deploymentTarget` is lower than 16.4
   cannot install this pod.
-- Banner ads only (phase 1)
+- Banner, interstitial, and rewarded ads (phases 1–2)
 
-Not yet supported (future phases):
+Not yet supported:
 
-- UMP (consent management) — designed separately in phase 2
-- Interstitial / rewarded / app open / native ads — phase 3
+- UMP (consent management) — phase 3
+- Native ads — phase 4
+- App-open ads
+- Server-side verification for rewarded ads
 
 ## Installation
 
@@ -61,7 +63,7 @@ Pass your AdMob App IDs to the plugin's config in `app.json` (or `app.config.js`
 
 The plugin validates the presence and format of the App IDs at build time. If an ID is missing, or if an ad **unit** ID (slash-separated, like `ca-app-pub-xxxx/yyyy`) is passed where an App ID belongs, the build fails immediately with a message that explains why. An App ID uses the tilde-separated form: `ca-app-pub-xxxxxxxxxxxxxxxx~xxxxxxxxxx`. This mix-up is the single most common mistake AdMob newcomers make, and left unchecked it turns into an opaque crash on iOS or exception on Android, deep inside the Google SDK.
 
-Passing `delayAppMeasurementInit: true` writes a setting on both platforms that delays sending measurement data until UMP consent has been collected (groundwork for phase 2's UMP support).
+Passing `delayAppMeasurementInit: true` writes a setting on both platforms that delays sending measurement data until UMP consent has been collected (groundwork for phase 3's UMP support).
 
 ## Initializing the SDK
 
@@ -77,7 +79,7 @@ await initialize();
 
 The reason: Google's own guidance on the ordering of initialization versus UMP consent has shifted over time. The older guidance said consent must come first, because `initialize()` triggers ad preloading by mediation adapters; current guidance says initializing first is fine, since initialization itself doesn't process personal data and staying policy-compliant only requires not requesting ads until `canRequestAds()` is true. This is a decision that can carry legal weight for an app, and if the native side auto-initialized, the library would be silently picking one of these shifting interpretations for you, with no way for the app to override it. **The app decides this ordering, not the library.**
 
-Calling `createBannerAd()` before `initialize()` has been called is not an error — loading is queued internally until initialization completes. But if `initialize()` is never called at all, the ad stays `loading` forever. To catch that early, creating an ad while `initialize()` hasn't run yet logs a `__DEV__` warning.
+Calling `createBannerAd()`, `createInterstitialAd()`, or `createRewardedAd()` before `initialize()` has been called is not an error — loading is queued internally until initialization completes. But if `initialize()` is never called at all, the ad stays `loading` forever. To catch that early, creating an ad while `initialize()` hasn't run yet logs a `__DEV__` warning.
 
 ## Preloading
 
@@ -199,6 +201,81 @@ const size = BannerAdSize.inlineAdaptive({ maxHeight: 200 });
 
 The returned `height` is a **maximum**, not the final height — the served ad may come back shorter. `ad.loadedSize` reports what actually arrived once the ad loads, and it carries `adaptiveKind` too, so it can be passed straight back into `useBannerAd`'s `size` option without silently degrading to a fixed size.
 
+## Interstitial and rewarded ads
+
+Full-screen ads have no view — they are created and shown, not rendered. `createInterstitialAd({ adUnitId, requestOptions })` and `createRewardedAd({ adUnitId, requestOptions })` return `SharedObject`s that start loading immediately, so — same as `createBannerAd` — they can be created outside React: at app startup, or before a screen transition.
+
+```typescript
+import { createInterstitialAd, createRewardedAd } from 'expo-google-mobile-ads';
+
+export const interstitialAd = createInterstitialAd({
+  adUnitId: 'ca-app-pub-3940256099942544/1033173712',
+});
+
+export const rewardedAd = createRewardedAd({
+  adUnitId: 'ca-app-pub-3940256099942544/5224354917',
+});
+```
+
+### Hooks
+
+The same ownership split as the banner hooks above, doubled for the two ad types:
+
+| hook | creates the ad | releases it on unmount |
+|---|---|---|
+| `useInterstitialAd(options)` | yes | **yes** |
+| `useInterstitialAdState(ad)` | no (subscribes to an existing `ad`) | **no** |
+| `useRewardedAd(options)` | yes | **yes** |
+| `useRewardedAdState(ad)` | no (subscribes to an existing `ad`) | **no** |
+
+```tsx
+import { useInterstitialAd } from 'expo-google-mobile-ads';
+
+function Screen() {
+  const { ad, isLoaded } = useInterstitialAd({
+    adUnitId: 'ca-app-pub-3940256099942544/1033173712',
+  });
+
+  return <Button title="Show ad" disabled={!isLoaded} onPress={() => ad.show()} />;
+}
+```
+
+To just watch a preloaded ad's state (e.g. `interstitialAd` above), use `useInterstitialAdState` / `useRewardedAdState` instead — neither creates nor releases the `ad` passed to it; the caller owns its lifetime.
+
+### Single-use
+
+A full-screen ad can be shown once. After `show()`, `status` becomes `'shown'`, which is **terminal** — calling `load()` on it does nothing. Both platform SDKs enforce this independently of this library anyway (iOS reports `AdAlreadyUsed`, Android `AD_REUSED`), so there is no way around it. Create a new ad with `createInterstitialAd` / `createRewardedAd` for the next impression.
+
+### `show()`
+
+```typescript
+show(): Promise<void>;             // InterstitialAd
+show(): Promise<AdReward | null>;  // RewardedAd
+```
+
+Resolves when the user dismisses the ad. For a rewarded ad, it resolves with the `AdReward` the user earned, or `null` if they dismissed it without earning one.
+
+It rejects with a `ShowAdError` whose `code` is one of:
+
+- `notLoaded` — the ad isn't ready. Check `isLoaded` before calling `show()`.
+- `alreadyShown` — this ad's `status` is already `'shown'`.
+- `failedToShow` — the SDK itself refused to present it.
+
+**`show()` deliberately does not wait for an ad that is still loading.** Showing a full-screen ad "as soon as it finishes loading" means it can interrupt a user who has since moved on to something else — which is exactly what Google's own policy guidance warns against. Check `isLoaded` and skip the ad if it isn't ready, rather than queuing a `show()` call behind the load.
+
+### `ad.reward` is not proof anything was earned
+
+A `RewardedAd`'s `reward` property is what the ad **offers** — readable as soon as it loads, before it has ever been shown, so a prompt can tell the user what they stand to get. **It is not evidence the reward was earned.** On iOS in particular, the underlying value is populated before the ad is ever presented, so treating its mere presence as "the user watched the ad" would grant the reward to someone who dismissed it immediately.
+
+**The only source of truth for whether a reward was earned is the value `show()` resolves with.** Grant the reward there — never from `ad.reward`.
+
+```typescript
+const reward = await rewardedAd.show(); // AdReward | null
+if (reward) {
+  // grant `reward.amount` of `reward.type`
+}
+```
+
 ## Mediation
 
 This library doesn't ship a version-pinned "curated list" of mediation adapters. Adapter versions change often, and pinning them here would just become stale maintenance debt. Instead, the config plugin exposes raw hooks for the dependencies, and you specify what you need yourself.
@@ -276,22 +353,44 @@ export type { AdaptiveOptions, BannerAdAdaptiveKind, BannerAdSizeSpec, InlineAda
 export function initialize(): Promise<InitializationStatus>;
 export function setRequestConfiguration(config: RequestConfiguration): void;
 
-// hooks
+// Banner hooks
 export function useBannerAd(options: BannerAdOptions): BannerAdState & { ad: BannerAd };
 export function useBannerAdState(ad: BannerAd): BannerAdState;
 export type { BannerAdState };
 export function useBannerAdSize(spec: BannerAdSizeSpec): BannerAdSize;
 
+// Interstitial ads
+export function createInterstitialAd(options: FullScreenAdOptions): InterstitialAd;
+export type { InterstitialAd, FullScreenAdEvents };
+
+// Rewarded ads
+export function createRewardedAd(options: FullScreenAdOptions): RewardedAd;
+export type { RewardedAd, RewardedAdEvents };
+
+// Full-screen ads (shared)
+export class ShowAdError extends Error { code: ShowAdErrorCode; }
+export type { FullScreenAdOptions };
+
+// Full-screen ad hooks
+export function useInterstitialAd(options: FullScreenAdOptions): FullScreenAdState & { ad: InterstitialAd };
+export function useInterstitialAdState(ad: InterstitialAd): FullScreenAdState;
+export type { FullScreenAdState };
+export function useRewardedAd(options: FullScreenAdOptions): FullScreenAdState & { ad: RewardedAd };
+export function useRewardedAdState(ad: RewardedAd): FullScreenAdState;
+
 // types
 export type {
   AdError,
+  AdReward,
   AdapterResponse,
   BannerAdStatus,
+  FullScreenAdStatus,
   InitializationStatus,
   PaidEventValue,
   RequestConfiguration,
   RequestOptions,
   ResponseInfo,
+  ShowAdErrorCode,
 };
 ```
 
