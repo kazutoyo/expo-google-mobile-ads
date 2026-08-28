@@ -19,6 +19,14 @@ updates:
       example:
         patterns: ['*']
 
+  - package-ecosystem: npm
+    directory: /website
+    schedule:
+      interval: weekly
+    groups:
+      website:
+        patterns: ['*']
+
   # Keeps the SHA pins in the workflows current — pinning and updating are not
   # in conflict; the pin is what makes the update reviewable.
   - package-ecosystem: github-actions
