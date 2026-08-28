@@ -119,6 +119,12 @@ private fun AdSize.toMap(): Map<String, Any?> = mapOf("width" to width, "height"
  *
  * Every UMP callback on Android hands back a nullable [FormError], so this is the single place
  * that turns one into a JS rejection — the six functions below never build a rejection themselves.
+ *
+ * This is always called from inside a UMP listener callback, and the module's invariant is
+ * "every UMP call on the main thread" — including the [consentSnapshot] read below, which touches
+ * four `ConsentInformation` properties. That invariant holds here because the UMP SDK itself
+ * dispatches these callbacks to the main thread, not because this function enforces it, so there
+ * is no `mainHandler.post` hop: it is already on main and re-posting would only add latency.
  */
 private fun settleConsent(promise: Promise, context: Context, error: FormError?) {
   if (error != null) {

@@ -62,7 +62,7 @@ Pass your AdMob App IDs to the plugin's config in `app.json` (or `app.config.js`
 
 The plugin validates the presence and format of the App IDs at build time. If an ID is missing, or if an ad **unit** ID (slash-separated, like `ca-app-pub-xxxx/yyyy`) is passed where an App ID belongs, the build fails immediately with a message that explains why. An App ID uses the tilde-separated form: `ca-app-pub-xxxxxxxxxxxxxxxx~xxxxxxxxxx`. This mix-up is the single most common mistake AdMob newcomers make, and left unchecked it turns into an opaque crash on iOS or exception on Android, deep inside the Google SDK.
 
-Passing `delayAppMeasurementInit: true` writes a setting on both platforms that delays sending measurement data until UMP consent has been collected (groundwork for phase 3's UMP support).
+Passing `delayAppMeasurementInit: true` writes a setting on both platforms that delays sending measurement data until UMP consent has been collected (see the [Consent (UMP)](#consent-ump) section below).
 
 ## Initializing the SDK
 
@@ -157,9 +157,9 @@ Also note: none of `ConsentInfo`'s four fields change according to *which* priva
 | `network` | Network error contacting the consent server |
 | `timeout` | The request timed out |
 | `invalidOperation` | Called out of order (e.g. showing a form before an update) |
-| `misconfiguration` | **iOS only** |
-| `formUnavailable` | **iOS only** |
-| `internal` | SDK-internal error |
+| `misconfiguration` | **iOS only** — the app ID or the UMP setup in the AdMob console is wrong |
+| `formUnavailable` | **iOS only** — no consent form could be loaded for this user |
+| `internal` | SDK-internal error. On Android, also covers the app's React context having been torn down |
 | `noActivity` | **Android only** — the call arrived with no Activity in the foreground |
 | `unknown` | Anything native didn't send a recognized code for |
 

@@ -146,7 +146,7 @@ public final class ExpoGoogleMobileAdsModule: Module {
           try await Consent.showFormIfRequired(from: self.appContext?.utilities?.currentViewController())
           promise.resolve(Consent.snapshot())
         } catch let error as NSError {
-          promise.reject(consentErrorCode(error), consentErrorMessage(error))
+          promise.reject(AdException(consentErrorCode(error), consentErrorMessage(error)))
         }
       }
     }
@@ -157,7 +157,7 @@ public final class ExpoGoogleMobileAdsModule: Module {
           try await Consent.requestInfoUpdate(options)
           promise.resolve(Consent.snapshot())
         } catch let error as NSError {
-          promise.reject(consentErrorCode(error), consentErrorMessage(error))
+          promise.reject(AdException(consentErrorCode(error), consentErrorMessage(error)))
         }
       }
     }
@@ -168,7 +168,7 @@ public final class ExpoGoogleMobileAdsModule: Module {
           try await Consent.showFormIfRequired(from: self.appContext?.utilities?.currentViewController())
           promise.resolve(Consent.snapshot())
         } catch let error as NSError {
-          promise.reject(consentErrorCode(error), consentErrorMessage(error))
+          promise.reject(AdException(consentErrorCode(error), consentErrorMessage(error)))
         }
       }
     }
@@ -179,7 +179,7 @@ public final class ExpoGoogleMobileAdsModule: Module {
           try await Consent.showPrivacyOptionsForm(from: self.appContext?.utilities?.currentViewController())
           promise.resolve(Consent.snapshot())
         } catch let error as NSError {
-          promise.reject(consentErrorCode(error), consentErrorMessage(error))
+          promise.reject(AdException(consentErrorCode(error), consentErrorMessage(error)))
         }
       }
     }

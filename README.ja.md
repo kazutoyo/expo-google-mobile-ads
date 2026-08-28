@@ -58,7 +58,7 @@ npx expo install expo-google-mobile-ads
 
 plugin はビルド時に App ID の存在と形式を検証する。未設定、または広告**ユニット** ID（`ca-app-pub-xxxx/yyyy` のようにスラッシュ区切り）を App ID の場所に渡した場合は、ビルドをその場で失敗させ、原因が分かるメッセージを出す。App ID は `ca-app-pub-xxxxxxxxxxxxxxxx~xxxxxxxxxx`（チルダ区切り）の形式である。この取り違えは AdMob 初心者が最も踏みやすい落とし穴で、放置すると Google SDK 側で分かりにくいクラッシュ（iOS）や例外（Android）になる。
 
-`delayAppMeasurementInit: true` を渡すと、UMP の同意取得が終わるまで計測の送信を遅らせる設定を両 OS に書き込む（フェーズ3の UMP 対応への布石）。
+`delayAppMeasurementInit: true` を渡すと、UMP の同意取得が終わるまで計測の送信を遅らせる設定を両 OS に書き込む(詳細は後述の[同意管理 (UMP)](#同意管理-ump)セクションを参照)。
 
 ## SDK の初期化
 
@@ -153,9 +153,9 @@ function PrivacySettingsRow() {
 | `network` | 同意サーバーとの通信エラー |
 | `timeout` | リクエストがタイムアウトした |
 | `invalidOperation` | 呼び出し順序の誤り(例: 更新前にフォームを表示しようとした) |
-| `misconfiguration` | **iOS 限定** |
-| `formUnavailable` | **iOS 限定** |
-| `internal` | SDK 内部エラー |
+| `misconfiguration` | **iOS 限定** — App ID または AdMob コンソール側の UMP 設定が誤っている |
+| `formUnavailable` | **iOS 限定** — このユーザー向けの同意フォームを読み込めなかった |
+| `internal` | SDK 内部エラー。Android では、アプリの React context が破棄された場合もこれに含まれる |
 | `noActivity` | **Android 限定** — フォアグラウンドに Activity がない状態で呼び出しが到達した |
 | `unknown` | ネイティブ側から認識可能なコードが送られてこなかった場合 |
 

@@ -475,6 +475,9 @@ class FullScreenAd: SharedObject {
 /// delivers: same failure, same string, both platforms.
 /// `@unchecked Sendable` is restated because Swift requires a subclass to repeat an inherited
 /// unchecked conformance; the one stored property is an immutable `String`.
+///
+/// Used by `ExpoGoogleMobileAdsModule`'s UMP consent rejections too, not just ad-show failures —
+/// the name predates that reuse but the fix applies identically.
 final class AdException: Exception, @unchecked Sendable {
   private let text: String
 

@@ -42,6 +42,11 @@ describe('useConsentInfo', () => {
     const { unmount } = await renderHook(() => useConsentInfo());
 
     unmount();
+    // Deliberately not wrapped in `act()`: React 19 removed the "setState on an unmounted
+    // component" warning entirely, so the only remaining signal that would catch a regression
+    // here is React's "not wrapped in act()" warning. Wrapping this call in `act()` would
+    // suppress that warning too, making this assertion pass vacuously no matter what the hook
+    // does. Do not "fix" this back into an `act()`-wrapped call.
     setConsentInfo(obtained);
 
     expect(warn).not.toHaveBeenCalled();
