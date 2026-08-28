@@ -306,7 +306,26 @@ abstract class FullScreenAd(
   }
 
   protected fun handleFailedToShow(contentError: FullScreenContentError) {
-    setState("error", contentError.toMap())
+    // **A presentation failure must never move the ad out of `"shown"`** — the same rule, and the
+    // same reason, as [shouldDiscardLoadResult]. Reachable by calling the `@internal` `showAsync()`
+    // on an already-shown ad: the SDK answers with `AD_REUSED` and this callback fires while the
+    // status is still the terminal `"shown"`. Recording it would park the ad on `"error"`, where
+    // [load]'s terminal guard — which tests only `status == "shown"` — no longer refuses, so one JS
+    // object could be loaded and shown a second time. On rewarded that is the real-money bug the
+    // whole invariant exists to prevent.
+    //
+    // The guard belongs *here*, in the failure callback, rather than at the entry to [showAsync].
+    // This is the single point every presentation failure passes through, whatever produced it —
+    // including a failure that arrives after `onAdShowedFullScreenContent` has already set
+    // `"shown"` for that very presentation, which no entry check could catch. An entry check would
+    // also only restate JS's `assertShowable`, and would leave this path open.
+    //
+    // Discarding the whole record rather than keeping the error alongside `"shown"` matches
+    // [handleLoadFailed]: no status change, no `statusChange` event, nothing for JS to observe. The
+    // promise is still rejected below — the caller is never left hanging.
+    if (state.status != "shown") {
+      setState("error", contentError.toMap())
+    }
     settleShowPromise { it.reject("ERR_AD_SHOW_FAILED", contentError.message, null) }
   }
 
