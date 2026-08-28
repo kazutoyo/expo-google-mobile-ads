@@ -3,7 +3,7 @@ title: "Interstitial and rewarded ads"
 description: "Single-use full-screen ads: shown rather than rendered, and what counts as an earned reward."
 ---
 
-Full-screen ads have no view — they are created and shown, not rendered. `createInterstitialAd({ adUnitId, requestOptions })` and `createRewardedAd({ adUnitId, requestOptions })` return `SharedObject`s that start loading immediately, so — same as `createBannerAd` — they can be created outside React: at app startup, or before a screen transition.
+Full-screen ads have no view — they are created and shown, not rendered. `createInterstitialAd({ adUnitId, requestOptions })` and `createRewardedAd({ adUnitId, requestOptions })` return `SharedObject`s that start loading right away — queued until `initialize()` completes, same as a banner — so — same as `createBannerAd` — they can be created outside React: at app startup, or before a screen transition.
 
 ```typescript
 import { createInterstitialAd, createRewardedAd } from '@kazutoyo/expo-google-mobile-ads';
@@ -36,7 +36,14 @@ function Screen() {
     adUnitId: 'ca-app-pub-3940256099942544/1033173712',
   });
 
-  return <Button title="Show ad" disabled={!isLoaded} onPress={() => ad.show()} />;
+  return (
+    <Button
+      title="Show ad"
+      disabled={!isLoaded}
+      // `show()` rejects with a ShowAdError; an unhandled one is a crash in dev.
+      onPress={() => ad.show().catch((error) => console.warn(error))}
+    />
+  );
 }
 ```
 
@@ -70,8 +77,12 @@ A `RewardedAd`'s `reward` property is what the ad **offers** — readable as soo
 **The only source of truth for whether a reward was earned is the value `show()` resolves with.** Grant the reward there — never from `ad.reward`.
 
 ```typescript
-const reward = await rewardedAd.show(); // AdReward | null
-if (reward) {
-  // grant `reward.amount` of `reward.type`
+try {
+  const reward = await rewardedAd.show(); // AdReward | null
+  if (reward) {
+    // grant `reward.amount` of `reward.type`
+  }
+} catch (error) {
+  // ShowAdError — the ad could not be presented. Carry on without the reward.
 }
 ```

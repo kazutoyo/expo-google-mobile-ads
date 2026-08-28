@@ -3,7 +3,7 @@ title: "インタースティシャル / リワード広告"
 description: "使い切りの全画面広告。描画ではなく表示するもので、報酬の獲得判定には決まりがある。"
 ---
 
-フルスクリーン広告には View がない——生成して表示するものであり、レンダリングするものではない。`createInterstitialAd({ adUnitId, requestOptions })` と `createRewardedAd({ adUnitId, requestOptions })` は、生成した瞬間にロードを開始する `SharedObject` を返す。`createBannerAd` と同様に、React の外——アプリ起動時や画面遷移前——で呼べる。
+フルスクリーン広告には View がない——生成して表示するものであり、レンダリングするものではない。`createInterstitialAd({ adUnitId, requestOptions })` と `createRewardedAd({ adUnitId, requestOptions })` は、生成した瞬間にロードを開始する `SharedObject`(バナーと同じく `initialize()` の完了までは内部でキューイングされる)を返す。`createBannerAd` と同様に、React の外——アプリ起動時や画面遷移前——で呼べる。
 
 ```typescript
 import { createInterstitialAd, createRewardedAd } from '@kazutoyo/expo-google-mobile-ads';
@@ -36,7 +36,14 @@ function Screen() {
     adUnitId: 'ca-app-pub-3940256099942544/1033173712',
   });
 
-  return <Button title="Show ad" disabled={!isLoaded} onPress={() => ad.show()} />;
+  return (
+    <Button
+      title="Show ad"
+      disabled={!isLoaded}
+      // show() は ShowAdError で reject する。未処理のままにしない
+      onPress={() => ad.show().catch((error) => console.warn(error))}
+    />
+  );
 }
 ```
 
@@ -70,8 +77,12 @@ show(): Promise<AdReward | null>;  // RewardedAd
 **報酬が獲得されたかどうかの唯一の正しい情報源は、`show()` が resolve する値である。** 報酬はそこで付与すること——`ad.reward` からは絶対に付与しないこと。
 
 ```typescript
-const reward = await rewardedAd.show(); // AdReward | null
-if (reward) {
-  // `reward.amount` 個の `reward.type` を付与する
+try {
+  const reward = await rewardedAd.show(); // AdReward | null
+  if (reward) {
+    // `reward.amount` 個の `reward.type` を付与する
+  }
+} catch (error) {
+  // ShowAdError — 表示できなかった。報酬なしで進める
 }
 ```

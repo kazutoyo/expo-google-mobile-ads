@@ -47,7 +47,10 @@ jobs:
     name: Deploy
     needs: build
     # A pull request builds to prove the site still compiles; only main ships.
-    if: github.event_name != 'pull_request'
+    # The ref check is what holds for `workflow_dispatch`, which can be aimed at
+    # any branch — without it a manual run would publish that branch to the
+    # live site.
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       pages: write

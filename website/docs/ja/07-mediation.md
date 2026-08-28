@@ -19,9 +19,6 @@ description: "config plugin の依存フック経由でメディエーション�
           "androidDependencies": [
             "com.google.ads.mediation:applovin:13.6.4.0"
           ],
-          "androidMavenRepositories": [
-            "https://artifact.bytedance.com/repository/pangle/"
-          ],
           "iosPods": {
             "GoogleMobileAdsMediationAppLovin": "13.6.3.0"
           }

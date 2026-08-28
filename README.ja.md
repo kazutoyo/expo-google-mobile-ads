@@ -16,7 +16,7 @@ Expo Modules ネイティブな [Google Mobile Ads (AdMob)](https://developers.g
 
 このライブラリは Expo Modules API(`SharedObject`)の上に構築されており、広告インスタンスと表示ビューを意図的に分離している。
 
-- **プリロード可能** — `createBannerAd()` は React の外で、画面遷移の前やアプリ起動時に呼べる。ロードは即座に始まり、ビューは後から取り付けられる
+- **プリロード可能** — `createBannerAd()` は React の外で、画面遷移の前やアプリ起動時に呼べる。ロードはビューを待たずに始まり(`initialize()` が完了するまでは内部でキューイングされる)、ビューは後から取り付けられる
 - **画面をまたいで再利用可能** — `<BannerAdView ad={ad} />` はアンマウント時に**デタッチするだけで破棄しない**。同じ広告インスタンスを別の画面で再表示できる
 - **hooks ベース** — React からは `useBannerAd` / `useBannerAdState` という薄いラッパーを使う。それ以上のことはしない
 - **レイアウトシフトなし** — `BannerAdSize` はロードを待たない同期関数でサイズを計算するため、広告が届く前に表示領域を確保できる

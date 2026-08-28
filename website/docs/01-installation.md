@@ -12,9 +12,10 @@ build: `npx expo run:ios` / `npx expo run:android` locally, or `eas build --prof
 Adding the package to a project running in Expo Go fails at `requireNativeModule` with a message
 about the module not being found, which reads like a bug in the library and is not one.
 
-The config plugin below writes your App IDs into the native projects, so after changing it run a
-fresh build (`npx expo prebuild --clean`, or the run/build commands above) — a JavaScript reload
-is not enough.
+The config plugin below writes your App IDs into the native projects, so after changing it the
+native projects have to be regenerated *and* rebuilt: `npx expo prebuild --clean` followed by
+`npx expo run:ios` / `npx expo run:android`, or a fresh EAS build. `prebuild` on its own only
+rewrites the projects — it installs nothing on the device — and a JavaScript reload does neither.
 
 ## Config plugin
 

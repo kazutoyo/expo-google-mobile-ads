@@ -16,7 +16,7 @@ The existing `react-native-google-mobile-ads` targets React Native (TurboModules
 
 This library is built on the Expo Modules API (`SharedObject`), with the ad instance and the display view deliberately kept separate.
 
-- **Preloadable** — `createBannerAd()` can be called outside React, before a screen transition or at app startup. Loading starts immediately; the view can be attached later.
+- **Preloadable** — `createBannerAd()` can be called outside React, before a screen transition or at app startup. Loading starts without waiting for a view — it is queued until `initialize()` completes — and the view can be attached later.
 - **Reusable across screens** — `<BannerAdView ad={ad} />` **only detaches, never destroys**, the ad on unmount. The same ad instance can be shown again on a different screen.
 - **Hooks-based** — from React, `useBannerAd` / `useBannerAdState` are thin wrappers, nothing more.
 - **No layout shift** — `BannerAdSize` computes sizes with a synchronous function that doesn't wait for a load, so the display area can be reserved before the ad arrives.

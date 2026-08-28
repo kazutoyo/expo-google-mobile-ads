@@ -9,7 +9,7 @@ npx expo install @kazutoyo/expo-google-mobile-ads
 
 このモジュールはネイティブコードを含むため、**Expo Go では動作しない**。development build が必要になる。ローカルなら `npx expo run:ios` / `npx expo run:android`、EAS なら `eas build --profile development`。Expo Go のプロジェクトに入れると `requireNativeModule` で「モジュールが見つからない」というエラーになるが、これはライブラリの不具合ではない。
 
-後述の config plugin は App ID をネイティブプロジェクトに書き込むため、変更したらビルドし直す必要がある（`npx expo prebuild --clean` か上記の run/build コマンド）。JavaScript のリロードだけでは反映されない。
+後述の config plugin は App ID をネイティブプロジェクトに書き込むため、変更したらネイティブプロジェクトの再生成**と**ビルドの両方が必要になる。`npx expo prebuild --clean` のあとに `npx expo run:ios` / `npx expo run:android`、あるいは EAS でビルドし直す。`prebuild` 単体はプロジェクトを書き換えるだけで端末には何もインストールしないし、JavaScript のリロードではどちらも起きない。
 
 ## config plugin の設定
 

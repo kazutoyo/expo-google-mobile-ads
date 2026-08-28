@@ -19,9 +19,6 @@ The example below uses AppLovin as a fully worked reference — a real, current 
           "androidDependencies": [
             "com.google.ads.mediation:applovin:13.6.4.0"
           ],
-          "androidMavenRepositories": [
-            "https://artifact.bytedance.com/repository/pangle/"
-          ],
           "iosPods": {
             "GoogleMobileAdsMediationAppLovin": "13.6.3.0"
           }
