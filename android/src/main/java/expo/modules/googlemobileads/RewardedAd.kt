@@ -70,10 +70,23 @@ class RewardedAd(
 
   /** Main thread. */
   private fun onAdReady(loaded: GmaRewardedAd) {
-    if (isReleased) {
+    if (shouldDiscardLoadResult) {
+      // Released, a show is in flight, or this ad has already been shown. See the same guard in
+      // InterstitialAd.kt for why installing here would hang the show promise — and note that the
+      // ad destroyed is the one that just arrived, never the one that is presenting.
+      //
+      // This is also what closes the reward hole: it is the only path that could have installed a
+      // new ad while an earlier one's reward listener could still fire, or carried an
+      // `earnedReward` from presentation #1 into presentation #2. An ad can only have been
+      // presented if `showPromise != null` (during) or `status == "shown"` (after), and both are
+      // discarded here.
       loaded.destroy()
       return
     }
+    // Clears and destroys any previous ad and — critically — resets `earnedReward`, so no reward
+    // recorded for an earlier ad can be read out by this one. Safe only because the guard above
+    // has ruled out a presentation in flight.
+    tearDownAd()
     loaded.adEventCallback = object : RewardedAdEventCallback {
       override fun onAdShowedFullScreenContent() = handleShowed()
 
@@ -127,11 +140,14 @@ class RewardedAd(
       it.destroy()
     }
     ad = null
-    // Also reached at the start of load(), so the per-presentation record is cleared here rather
-    // than only at release. Android's reward path is the easy side — the reward is a listener
-    // parameter, not a latched flag — but a stale `earnedReward` surviving into a second ad would
-    // resolve show() with a reward nobody earned on this presentation. The `"shown"` guard in
-    // FullScreenAd.load() already makes that unreachable; this is the cheap second layer.
+    // Reached at the start of load() and before a load result replaces an existing ad, so the
+    // per-presentation record is cleared here rather than only at release. A stale `earnedReward`
+    // surviving into a second ad resolves show() with a reward nobody earned on this presentation.
+    //
+    // This is not belt-and-braces, and an earlier comment here claiming the `"shown"` guard in
+    // load() made it unreachable was wrong: before fix round 1 the load callback installed a new ad
+    // without ever routing through here, so a result landing after a presentation reached exactly
+    // that bug without going through load() at all.
     earnedReward.set(null)
     reward = null
   }

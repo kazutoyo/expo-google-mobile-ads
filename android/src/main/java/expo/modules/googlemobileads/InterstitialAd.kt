@@ -55,12 +55,24 @@ class InterstitialAd(
 
   /** Main thread. */
   private fun onAdReady(loaded: GmaInterstitialAd) {
-    if (isReleased) {
-      // Released while the request was in flight. Destroy the ad instead of wiring it up —
-      // `tearDownAd()` has already run and will not run again.
+    if (shouldDiscardLoadResult) {
+      // Released, a show is in flight, or this ad has already been shown. Installing would mean
+      // tearing down whatever is here — including, in the in-flight case, the callback the show
+      // promise is waiting on.
+      //
+      // **Destroy the ad that just arrived, not the one that is here.** Tearing down the
+      // presenting ad is exactly the hang iOS spent a round fixing. Unlike iOS, where ARC frees a
+      // dropped ad on return, an Android ad holds native resources until `destroy()` is called —
+      // so simply returning would leak it. Nothing has been wired up yet, so destroying it here is
+      // complete cleanup.
       loaded.destroy()
       return
     }
+    // Two loads can overlap: `load()` refuses to start a second request while a show is in flight,
+    // but a request issued earlier can still land now. Clear and destroy whatever is here before
+    // replacing it, or it keeps firing events into this shared object. Safe only because the guard
+    // above has ruled out a presentation.
+    tearDownAd()
     loaded.adEventCallback = object : InterstitialAdEventCallback {
       override fun onAdShowedFullScreenContent() = handleShowed()
 

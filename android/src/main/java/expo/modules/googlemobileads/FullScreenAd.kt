@@ -56,6 +56,9 @@ abstract class FullScreenAd(
   @Volatile
   private var state = FullScreenLoadState(status = "loading", error = null, responseInfo = null)
 
+  /** Serializes writes to [state]; see [setState]. */
+  private val stateLock = Any()
+
   val status: String get() = state.status
   val error: Map<String, Any?>? get() = state.error
   val responseInfo: Map<String, Any?>? get() = state.responseInfo
@@ -111,12 +114,20 @@ abstract class FullScreenAd(
         // reward from the *previous* presentation. Refuse, and leave the status where it is.
         return@postToMain
       }
+      if (showPromise.get() != null) {
+        // A reload **during** a presentation. The guard above does not catch this: the status is
+        // still `"loaded"` until `onAdShowedFullScreenContent` arrives, and it never arrives at
+        // all if presentation fails. Without this, `tearDownAd()` below would clear the presenting
+        // ad's event callback and `destroy()` it — orphaning the show promise forever and losing
+        // that presentation's remaining impression/clicked/paid events.
+        return@postToMain
+      }
       // Clears the previous ad's event callback and destroys it, plus (on rewarded) any state
       // recorded during a presentation. Nothing to do on the first load; on a retry after an
-      // error it stops a stale ad object from emitting into this shared object.
+      // error it stops a stale ad object from emitting into this shared object. Safe here only
+      // because the two guards above have ruled out a presentation.
       tearDownAd()
-      state = state.copy(status = "loading", error = null)
-      emitStatusChange()
+      setState("loading", null)
       loadAd(AdRequest.Builder(adUnitId).applyRequestOptions(requestOptions).build())
     }
   }
@@ -128,13 +139,37 @@ abstract class FullScreenAd(
    */
   fun markLoadFailed(message: String) {
     postToMain {
-      state = state.copy(
-        status = "error",
-        error = mapOf("code" to -1, "message" to message, "domain" to "ExpoGoogleMobileAds")
+      // Same guard as the two SDK-side load outcomes: this is a load result like any other, and
+      // recording it over a presentation would report a successful impression as a failure.
+      if (shouldDiscardLoadResult) {
+        return@postToMain
+      }
+      setState(
+        "error",
+        mapOf("code" to -1, "message" to message, "domain" to "ExpoGoogleMobileAds")
       )
-      emitStatusChange()
     }
   }
+
+  /**
+   * Whether a load result that has just arrived must be **discarded** rather than recorded.
+   *
+   * Installing a loaded ad means calling [tearDownAd] on whatever is already here, and that is
+   * destructive on Android: it clears the existing ad's `adEventCallback` *and* calls `destroy()`
+   * on it. Doing that to an ad that is mid-presentation drops the callback the show promise is
+   * waiting on, leaving it pending forever, and silently loses that ad's remaining
+   * impression/clicked/paid events. It would also let a late result walk the terminal `"shown"`
+   * status back to `"loaded"` or `"error"`, sneaking past [load]'s guards and letting one JS object
+   * show two ads — which on rewarded resolves `show()` with a reward nobody earned.
+   *
+   * Reachable because two loads can overlap: [load] refuses to start a second request while a show
+   * is in flight, but a request issued *before* the show can still land during or after it.
+   *
+   * Ported from iOS's `shouldDiscardLoadResult`, and applied at the same three sites plus
+   * [markLoadFailed].
+   */
+  protected val shouldDiscardLoadResult: Boolean
+    get() = isReleased || showPromise.get() != null || state.status == "shown"
 
   /** Subclass hook. Starts the SDK-side load; called on the main thread. */
   protected abstract fun loadAd(request: AdRequest)
@@ -151,9 +186,13 @@ abstract class FullScreenAd(
    * any state recorded during a presentation. `destroy()` has no iOS counterpart (ARC), and
    * skipping it is the Android-only way to leak an ad.
    *
-   * Called on the main thread from two places: release teardown, and the start of [load] (so a
-   * replaced ad object cannot keep emitting into this shared object). Must therefore be safe to
-   * call with no ad, and safe to call more than once.
+   * Called on the main thread from three sites: release teardown, the start of [load], and each
+   * subclass's load callback before it replaces an existing ad. Must therefore be safe to call
+   * with no ad, and safe to call more than once.
+   *
+   * **It must never run against an ad that is currently presenting** — that clears the callback
+   * the show promise is waiting on and destroys the ad out from under the presentation.
+   * [shouldDiscardLoadResult] and [load]'s guards are what keep every call site off that path.
    */
   protected abstract fun tearDownAd()
 
@@ -163,16 +202,27 @@ abstract class FullScreenAd(
    */
   protected open fun showResult(): Map<String, Any?>? = null
 
-  /** Called by a subclass from its load callback. */
+  /**
+   * Called by a subclass from its load callback, on the main thread, once
+   * [shouldDiscardLoadResult] has cleared the result for installation.
+   */
   protected fun handleLoaded(info: ResponseInfo?) {
-    state = FullScreenLoadState(status = "loaded", error = null, responseInfo = info.toMap())
+    synchronized(stateLock) {
+      state = FullScreenLoadState(status = "loaded", error = null, responseInfo = info.toMap())
+    }
     emitStatusChange()
   }
 
-  /** Called by a subclass from its load callback. */
+  /** Called by a subclass from its load callback, on the main thread. */
   protected fun handleLoadFailed(adError: LoadAdError) {
-    state = state.copy(status = "error", error = adError.toMap())
-    emitStatusChange()
+    // A load failure is subject to the same discard rule as a success. With two requests
+    // outstanding, a late failure from the first would overwrite `"shown"` with `"error"` and emit
+    // a statusChange reporting a successful impression as a failure. Worse, [load]'s terminal
+    // guard tests only `"shown"`, so an ad parked on `"error"` could be loaded and shown again.
+    if (shouldDiscardLoadResult) {
+      return
+    }
+    setState("error", adError.toMap())
   }
 
   // MARK: - Showing
@@ -246,8 +296,7 @@ abstract class FullScreenAd(
   // show promise depends on.
 
   protected fun handleShowed() {
-    state = state.copy(status = "shown", error = null)
-    emitStatusChange()
+    setState("shown", null)
     emit("showed")
   }
 
@@ -257,8 +306,7 @@ abstract class FullScreenAd(
   }
 
   protected fun handleFailedToShow(contentError: FullScreenContentError) {
-    state = state.copy(status = "error", error = contentError.toMap())
-    emitStatusChange()
+    setState("error", contentError.toMap())
     settleShowPromise { it.reject("ERR_AD_SHOW_FAILED", contentError.message, null) }
   }
 
@@ -278,6 +326,23 @@ abstract class FullScreenAd(
    */
   protected fun handlePaid(adValue: AdValue) {
     emit("paid", adValue.toPaidEventMap())
+  }
+
+  /**
+   * The one place `status`/`error` are changed without also replacing `responseInfo`.
+   *
+   * `synchronized` because this is a read-modify-write on [state] and the writers are not all on
+   * one thread: `load()`/`markLoadFailed()`/the load callbacks run on main, while `handleShowed()`
+   * and `handleFailedToShow()` arrive on whatever thread the SDK uses for `AdEventCallback` — which
+   * it does not document. Two unsynchronized `copy()` calls could otherwise interleave and drop
+   * one of the two writes. (The `@Volatile` on [state] still matters: it is what makes the JS-side
+   * getters, which do not take this lock, see the new value.)
+   */
+  private fun setState(status: String, error: Map<String, Any?>?) {
+    synchronized(stateLock) {
+      state = state.copy(status = status, error = error)
+    }
+    emitStatusChange()
   }
 
   private fun emitStatusChange() {
