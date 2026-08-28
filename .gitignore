@@ -61,3 +61,8 @@ yarn-error.log
 
 # npm pack
 *.tgz
+
+# Blume
+website/dist/
+website/.blume/
+website/.blume-verify/
