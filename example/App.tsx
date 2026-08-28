@@ -14,15 +14,24 @@ import {
 import {
   BannerAdSize,
   BannerAdView,
+  ShowAdError,
   createBannerAd,
+  createInterstitialAd,
+  createRewardedAd,
   initialize,
   useBannerAd,
   useBannerAdSize,
   useBannerAdState,
+  useInterstitialAd,
+  useRewardedAd,
   type BannerAd,
+  type InterstitialAd,
+  type RewardedAd,
 } from 'expo-google-mobile-ads';
 
 const TEST_BANNER_UNIT_ID = 'ca-app-pub-3940256099942544/9214589741';
+const TEST_INTERSTITIAL_UNIT_ID = 'ca-app-pub-3940256099942544/1033173712';
+const TEST_REWARDED_UNIT_ID = 'ca-app-pub-3940256099942544/5224354917';
 // Not a real Google test ad unit — a made-up, non-existent ID. Used for the error QA case.
 const BAD_BANNER_UNIT_ID = 'ca-app-pub-3940256099942544/0000000000';
 
@@ -311,6 +320,324 @@ function HookCreatedBannerContent({ useBadUnit, width }: { useBadUnit: boolean; 
   );
 }
 
+// ---------------------------------------------------------------------------
+// Full-screen ads (interstitial / rewarded)
+// ---------------------------------------------------------------------------
+
+// Created outside React, at module scope, immediately after `initialize()` was *called* — so
+// with INITIALIZE_DELAY_MS set to 5000 these are the "created before initialize() resolved"
+// case: they must stay on `loading` for the whole delay and then load by themselves.
+const preloadedInterstitial = createInterstitialAd({ adUnitId: TEST_INTERSTITIAL_UNIT_ID });
+const preloadedRewarded = createRewardedAd({ adUnitId: TEST_REWARDED_UNIT_ID });
+
+// A separate ad used only for the "a load lands during/after a presentation" check, so the
+// other cards keep a clean, readable status history.
+const overlappingLoadAd = createInterstitialAd({ adUnitId: TEST_INTERSTITIAL_UNIT_ID });
+
+// A plain module-scope log. The interesting beats (events, promise settlement) happen outside
+// React and outside any component that is necessarily mounted, so the log cannot live in
+// component state. Every line also goes to the console, which is what `adb logcat` /
+// the iOS simulator log show.
+const logLines: string[] = [];
+const logListeners = new Set<() => void>();
+
+function qaLog(line: string) {
+  // The timestamp is part of the console line too: on iOS these never reach the system log,
+  // so the Metro console is the only timestamped record of when each beat happened.
+  const stamped = `${new Date().toISOString().slice(11, 23)} ${line}`;
+  console.log(`[QA] ${stamped}`);
+  logLines.unshift(stamped);
+  if (logLines.length > 60) logLines.pop();
+  logListeners.forEach((listener) => listener());
+}
+
+/** Subscribes the screen to `qaLog`. The log is an external store, hence the effect. */
+function useQaLog(): string[] {
+  const [, forceRender] = useState(0);
+  useEffect(() => {
+    const listener = () => forceRender((c) => c + 1);
+    logListeners.add(listener);
+    return () => {
+      logListeners.delete(listener);
+    };
+  }, []);
+  return logLines;
+}
+
+/** A released ad throws from every getter, so status is read defensively. */
+function readStatus(ad: InterstitialAd | RewardedAd): string {
+  try {
+    return ad.status;
+  } catch {
+    return 'released';
+  }
+}
+
+function responseId(ad: InterstitialAd | RewardedAd): string {
+  try {
+    return ad.responseInfo?.responseId ?? '-';
+  } catch {
+    return 'released';
+  }
+}
+
+/**
+ * Logs every event the ad emits and tracks its `status` for display.
+ *
+ * `status` is also re-read right after subscribing: the ad is an external system that can have
+ * moved on between the first render and the effect.
+ */
+function useFullScreenAdLog(ad: InterstitialAd | RewardedAd, label: string): string {
+  const [status, setStatus] = useState(() => readStatus(ad));
+
+  useEffect(() => {
+    // `RewardedAdEvents` is a superset of `FullScreenAdEvents`, but the union of the two ad types
+    // has two incompatible `addListener` signatures, so the listeners are attached through the
+    // wider one. `earnedReward` is still only subscribed to when the ad really is rewarded.
+    const listenable = ad as RewardedAd;
+    const subscriptions = [
+      listenable.addListener('statusChange', ({ status: next, error }) => {
+        setStatus(next);
+        qaLog(
+          `${label}: status -> ${next}${error ? ` error=${error.code} ${error.message}` : ''}` +
+            ` responseId=${responseId(ad)}`
+        );
+      }),
+      listenable.addListener('showed', () => qaLog(`${label}: showed`)),
+      listenable.addListener('dismissed', () => qaLog(`${label}: dismissed`)),
+      listenable.addListener('impression', () => qaLog(`${label}: impression`)),
+      listenable.addListener('clicked', () => qaLog(`${label}: clicked`)),
+      listenable.addListener('paid', (value) =>
+        qaLog(`${label}: paid ${value.value} ${value.currencyCode} (${value.precision})`)
+      ),
+    ];
+    if ('reward' in ad) {
+      subscriptions.push(
+        listenable.addListener('earnedReward', (reward) =>
+          qaLog(`${label}: earnedReward ${reward.type} x${reward.amount}`)
+        )
+      );
+    }
+    setStatus(readStatus(ad));
+    return () => subscriptions.forEach((subscription) => subscription.remove());
+  }, [ad, label]);
+
+  return status;
+}
+
+/** Calls `show()` and logs exactly how the promise settled, which is the whole point of the QA. */
+async function runShow(label: string, show: () => Promise<unknown>) {
+  qaLog(`${label}: show() called`);
+  try {
+    const result = await show();
+    qaLog(
+      `${label}: show() RESOLVED with ${result === undefined ? 'undefined' : JSON.stringify(result)}`
+    );
+  } catch (error) {
+    const code = error instanceof ShowAdError ? error.code : `(not a ShowAdError: ${typeof error})`;
+    qaLog(`${label}: show() REJECTED code=${code} message=${(error as Error).message}`);
+  }
+}
+
+/** One ad's status line. Rewarded ads also show the *offered* reward. */
+function AdStatusCard({
+  ad,
+  label,
+  onShow,
+}: {
+  ad: InterstitialAd | RewardedAd;
+  label: string;
+  onShow: () => void;
+}) {
+  const status = useFullScreenAdLog(ad, label);
+  const isRewarded = 'reward' in ad;
+  // Read during render, on purpose: the point is that it is readable *before* showing.
+  let offered = '-';
+  if (isRewarded) {
+    try {
+      const reward = (ad as RewardedAd).reward;
+      offered = reward ? `${reward.type} x${reward.amount}` : 'none yet';
+    } catch {
+      offered = 'released';
+    }
+  }
+
+  return (
+    <View style={styles.card}>
+      <Text style={styles.bold}>
+        {label}: status={status}
+      </Text>
+      {isRewarded ? (
+        <Text>
+          Offered reward (what the ad OFFERS — NOT earned, and not proof of anything earned):{' '}
+          {offered}
+        </Text>
+      ) : null}
+      <Button title={`Show ${label}`} onPress={onShow} />
+    </View>
+  );
+}
+
+/**
+ * The full-screen QA screen. Every button maps to a numbered item in `example/QA.md`.
+ */
+function FullScreenSection({ onBack }: { onBack: () => void }) {
+  const lines = useQaLog();
+  const hookInterstitial = useInterstitialAd({ adUnitId: TEST_INTERSTITIAL_UNIT_ID });
+  const hookRewarded = useRewardedAd({ adUnitId: TEST_REWARDED_UNIT_ID });
+  const overlappingStatus = useFullScreenAdLog(overlappingLoadAd, 'overlap');
+
+  // Item 3: an ad that has had no time at all to load. Created and shown in the same tick.
+  const handleShowStillLoading = () => {
+    const fresh = createInterstitialAd({ adUnitId: TEST_INTERSTITIAL_UNIT_ID });
+    qaLog(`fresh: created, status=${readStatus(fresh)}`);
+    runShow('fresh (expect notLoaded)', () => fresh.show()).then(() => fresh.release());
+  };
+
+  // Item 8: `load()` on a shown ad must change nothing. The status is logged now and again
+  // after a delay, so a late load result would show up.
+  const handleReloadShown = () => {
+    qaLog(`reload-shown: status before load() = ${readStatus(preloadedInterstitial)}`);
+    preloadedInterstitial.load();
+    setTimeout(
+      () =>
+        qaLog(
+          `reload-shown: status 3s after load() = ${readStatus(preloadedInterstitial)}` +
+            ` responseId=${responseId(preloadedInterstitial)}`
+        ),
+      3000
+    );
+  };
+
+  // Item B: force a load result to land *during* a presentation.
+  //
+  // A second `load()` cannot be started while a show is in flight (`load()` refuses), so the
+  // second request has to be issued *before* the show. Two loads are started 150ms apart —
+  // shorter than a real load takes — and the ad is shown the instant the first one lands, from
+  // the statusChange handler itself. The other request then completes while the ad is on
+  // screen, which is the only way to reach `shouldDiscardLoadResult`.
+  //
+  // What proves the guard held: the presenting ad still dismisses, `show()` still resolves,
+  // `status` stays `shown` with NO further statusChange, and `responseInfo.responseId` is
+  // unchanged after dismissal (an installed result would have replaced it).
+  const handleOverlappingLoad = () => {
+    qaLog(
+      `overlap: arming. status=${readStatus(overlappingLoadAd)} responseId=${responseId(overlappingLoadAd)}`
+    );
+    const subscription = overlappingLoadAd.addListener('statusChange', ({ status }) => {
+      if (status !== 'loaded') return;
+      subscription.remove();
+      qaLog(`overlap: first load landed (responseId=${responseId(overlappingLoadAd)}), showing now`);
+      runShow('overlap', () => overlappingLoadAd.show()).then(() => {
+        qaLog(
+          `overlap: after dismissal status=${readStatus(overlappingLoadAd)}` +
+            ` responseId=${responseId(overlappingLoadAd)}`
+        );
+        setTimeout(
+          () =>
+            qaLog(
+              `overlap: 5s after dismissal status=${readStatus(overlappingLoadAd)}` +
+                ` responseId=${responseId(overlappingLoadAd)}`
+            ),
+          5000
+        );
+      });
+    });
+    overlappingLoadAd.load();
+    setTimeout(() => {
+      qaLog('overlap: issuing the second load()');
+      overlappingLoadAd.load();
+    }, 150);
+  };
+
+  // Item C: a real presentation failure. Both `show()` calls pass the JS `status === 'loaded'`
+  // gate (the status only becomes `shown` once the SDK reports the presentation), so the second
+  // one reaches native and is rejected there as "already presenting" — which `show()` maps to
+  // `failedToShow`. The first must still resolve normally on dismissal.
+  const handleDoubleShow = () => {
+    runShow('double-show #1', () => hookInterstitial.ad.show());
+    runShow('double-show #2 (expect failedToShow)', () => hookInterstitial.ad.show());
+  };
+
+  // Item C, second route: call the internal `showAsync()` on an already-shown ad, bypassing the
+  // JS guard, so the SDK itself refuses the presentation (AdAlreadyUsed / AD_REUSED). Proves the
+  // native failure callback settles the promise instead of leaving it pending.
+  const handleForceSdkPresentFailure = () => {
+    qaLog(`sdk-fail: status=${readStatus(preloadedInterstitial)}, calling showAsync() directly`);
+    preloadedInterstitial.showAsync().then(
+      () => qaLog('sdk-fail: showAsync() RESOLVED (no presentation failure)'),
+      (error: Error) => qaLog(`sdk-fail: showAsync() REJECTED ${error.message}`)
+    );
+  };
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <ScrollView contentContainerStyle={styles.content}>
+        <Button title="Back to the main QA screen" onPress={onBack} />
+        <Text style={styles.bold}>
+          Full-screen ads. Watch a rewarded ad to the end for a reward; close it early to check
+          that no reward is granted.
+        </Text>
+
+        <AdStatusCard
+          ad={preloadedInterstitial}
+          label="preloaded interstitial"
+          onShow={() => runShow('preloaded interstitial', () => preloadedInterstitial.show())}
+        />
+        <AdStatusCard
+          ad={hookInterstitial.ad}
+          label="hook interstitial"
+          onShow={() => runShow('hook interstitial', () => hookInterstitial.ad.show())}
+        />
+        <AdStatusCard
+          ad={preloadedRewarded}
+          label="preloaded rewarded"
+          onShow={() => runShow('preloaded rewarded', () => preloadedRewarded.show())}
+        />
+        <AdStatusCard
+          ad={hookRewarded.ad}
+          label="hook rewarded"
+          onShow={() => runShow('hook rewarded', () => hookRewarded.ad.show())}
+        />
+
+        <View style={styles.card}>
+          <Text style={styles.bold}>Failure and guard cases</Text>
+          <Button
+            title="Show an ad that is still loading (expect notLoaded)"
+            onPress={handleShowStillLoading}
+          />
+          <Button
+            title="Show the preloaded interstitial again (expect alreadyShown)"
+            onPress={() => runShow('already-shown', () => preloadedInterstitial.show())}
+          />
+          <Button title="load() on the shown interstitial (expect no-op)" onPress={handleReloadShown} />
+          <Button
+            title={`Overlapping load during a presentation (status=${overlappingStatus})`}
+            onPress={handleOverlappingLoad}
+          />
+          <Button
+            title="show() twice in one tick (expect the 2nd to reject failedToShow)"
+            onPress={handleDoubleShow}
+          />
+          <Button
+            title="Force an SDK presentation failure on a shown ad"
+            onPress={handleForceSdkPresentFailure}
+          />
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.bold}>Log (newest first)</Text>
+          {lines.map((line, index) => (
+            <Text key={`${index}-${line}`} style={styles.log}>
+              {line}
+            </Text>
+          ))}
+        </View>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
 export default function App() {
   const [screen, setScreen] = useState<'a' | 'b'>('a');
   const [remountKey, setRemountKey] = useState(0);
@@ -320,6 +647,13 @@ export default function App() {
   const [renderCount, setRenderCount] = useState(0);
   const [unsubscribedReleased, setUnsubscribedReleased] = useState(false);
   const [showGallery, setShowGallery] = useState(false);
+  const [showFullScreen, setShowFullScreen] = useState(false);
+
+  // Full-screen ads have no view, so this screen is a list of buttons and a log rather than a
+  // gallery. It replaces the rest of the screen for the same reason the gallery does.
+  if (showFullScreen) {
+    return <FullScreenSection onBack={() => setShowFullScreen(false)} />;
+  }
 
   // The gallery replaces the rest of the screen rather than sitting under it: seven more
   // banners below ten buttons is unreadable, and each size needs to be seen in a card of its
@@ -341,6 +675,10 @@ export default function App() {
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
         <Button title="Show the banner size gallery" onPress={() => setShowGallery(true)} />
+        <Button
+          title="Show the full-screen ad QA screen"
+          onPress={() => setShowFullScreen(true)}
+        />
         <Button
           title={`Switch screen (current: ${screen}) - reuse test`}
           onPress={() => setScreen((s) => (s === 'a' ? 'b' : 'a'))}
@@ -396,4 +734,6 @@ const styles = StyleSheet.create({
   // Makes the box BannerAdView actually reserves visible, so a banner that stays at its
   // requested size after loading a smaller one shows up as letterboxing.
   outline: { borderWidth: 1, borderColor: '#f00' },
+  bold: { fontWeight: 'bold' },
+  log: { fontSize: 11, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
 });
