@@ -32,7 +32,7 @@ import {
   type BannerAd,
   type InterstitialAd,
   type RewardedAd,
-} from 'expo-google-mobile-ads';
+} from '@kazutoyo/expo-google-mobile-ads';
 
 const TEST_BANNER_UNIT_ID = 'ca-app-pub-3940256099942544/9214589741';
 const TEST_INTERSTITIAL_UNIT_ID = 'ca-app-pub-3940256099942544/1033173712';

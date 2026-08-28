@@ -23,7 +23,7 @@ object AppIdProvider {
     )
     return appInfo.metaData?.getString(META_DATA_KEY)
       ?: throw IllegalStateException(
-        "The AdMob App ID is not set. Specify androidAppId in the expo-google-mobile-ads " +
+        "The AdMob App ID is not set. Specify androidAppId in the @kazutoyo/expo-google-mobile-ads " +
           "plugin config in app.json."
       )
   }

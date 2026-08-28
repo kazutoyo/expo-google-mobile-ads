@@ -4,7 +4,7 @@
   "main": "index.ts",
   "dependencies": {
     "expo": "~57.0.17",
-    "expo-google-mobile-ads": "file:..",
+    "@kazutoyo/expo-google-mobile-ads": "file:..",
     "react": "19.2.3",
     "react-native": "0.86.3"
   },

@@ -1,4 +1,8 @@
-# expo-google-mobile-ads
+# @kazutoyo/expo-google-mobile-ads
+
+[![npm](https://img.shields.io/npm/v/@kazutoyo/expo-google-mobile-ads)](https://www.npmjs.com/package/@kazutoyo/expo-google-mobile-ads)
+[![CI](https://github.com/kazutoyo/expo-google-mobile-ads/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/kazutoyo/expo-google-mobile-ads/actions/workflows/ci.yml)
+[![License](https://img.shields.io/npm/l/@kazutoyo/expo-google-mobile-ads)](LICENSE)
 
 *([English](./README.md) | 日本語)*
 
@@ -33,7 +37,7 @@ Android は [GMA Next-Gen SDK](https://developers.google.com/admob/android/next-
 ## インストール
 
 ```sh
-npx expo install expo-google-mobile-ads
+npx expo install @kazutoyo/expo-google-mobile-ads
 ```
 
 ### config plugin の設定
@@ -45,7 +49,7 @@ npx expo install expo-google-mobile-ads
   "expo": {
     "plugins": [
       [
-        "expo-google-mobile-ads",
+        "@kazutoyo/expo-google-mobile-ads",
         {
           "androidAppId": "ca-app-pub-3940256099942544~3347511713",
           "iosAppId": "ca-app-pub-3940256099942544~1458002511"
@@ -65,7 +69,7 @@ plugin はビルド時に App ID の存在と形式を検証する。未設定�
 広告をロードする前に、アプリ起動時に一度だけ `initialize()` を呼ぶ。
 
 ```typescript
-import { initialize } from 'expo-google-mobile-ads';
+import { initialize } from '@kazutoyo/expo-google-mobile-ads';
 
 await initialize();
 ```
@@ -81,7 +85,7 @@ await initialize();
 Google User Messaging Platform (UMP) SDK は、アプリがそもそも広告をリクエストしてよいかどうかを決める同意(EEA 圏の GDPR や、他地域の同等の規制)を収集する。`initialize()` より前に実行すること — `canRequestAds` が分かるまでは、広告ロードに関わる他のことは何も安全に行えない。
 
 ```typescript
-import { gatherConsent, initialize } from 'expo-google-mobile-ads';
+import { gatherConsent, initialize } from '@kazutoyo/expo-google-mobile-ads';
 
 const { canRequestAds } = await gatherConsent();
 if (canRequestAds) await initialize();
@@ -112,7 +116,7 @@ function resetConsent(): Promise<ConsentInfo>;
 ### `useConsentInfo()`
 
 ```tsx
-import { useConsentInfo, showPrivacyOptionsForm } from 'expo-google-mobile-ads';
+import { useConsentInfo, showPrivacyOptionsForm } from '@kazutoyo/expo-google-mobile-ads';
 
 function PrivacySettingsRow() {
   const { privacyOptionsRequirement } = useConsentInfo();
@@ -186,7 +190,7 @@ await gatherConsent({
 
 ```typescript
 // 例: モジュールスコープ、または画面遷移前のどこかで
-import { createBannerAd, BannerAdSize } from 'expo-google-mobile-ads';
+import { createBannerAd, BannerAdSize } from '@kazutoyo/expo-google-mobile-ads';
 
 export const homeBannerAd = createBannerAd({
   adUnitId: 'ca-app-pub-3940256099942544/9214589741',
@@ -196,7 +200,7 @@ export const homeBannerAd = createBannerAd({
 
 ```tsx
 // 画面コンポーネント側
-import { useBannerAdState, BannerAdView } from 'expo-google-mobile-ads';
+import { useBannerAdState, BannerAdView } from '@kazutoyo/expo-google-mobile-ads';
 import { homeBannerAd } from './ads';
 
 function HomeScreen() {
@@ -220,7 +224,7 @@ function HomeScreen() {
 画面と広告のライフタイムが一致する（プリロードしない）単純なケースでは `useBannerAd` を使う。
 
 ```tsx
-import { useBannerAd, BannerAdSize, BannerAdView } from 'expo-google-mobile-ads';
+import { useBannerAd, BannerAdSize, BannerAdView } from '@kazutoyo/expo-google-mobile-ads';
 
 function Screen() {
   const { ad, isLoaded, error } = useBannerAd({
@@ -247,7 +251,7 @@ const subscription = ad.addListener('statusChange', ({ status }) => {
 ## BannerAdSize
 
 ```typescript
-import { BannerAdSize } from 'expo-google-mobile-ads';
+import { BannerAdSize } from '@kazutoyo/expo-google-mobile-ads';
 ```
 
 固定サイズ:
@@ -281,7 +285,7 @@ import { BannerAdSize } from 'expo-google-mobile-ads';
 `anchoredAdaptive` / `largeAnchoredAdaptive` の `options` は `{ width?: number; orientation?: 'current' | 'portrait' | 'landscape' }`（既定は画面幅・`'current'`）。画面回転に追従してサイズを再計算したい場合は `useBannerAdSize(spec)` hook を使う。
 
 ```typescript
-import { useBannerAdSize } from 'expo-google-mobile-ads';
+import { useBannerAdSize } from '@kazutoyo/expo-google-mobile-ads';
 
 const size = useBannerAdSize({ type: 'largeAnchoredAdaptive' });
 ```
@@ -305,7 +309,7 @@ const size = BannerAdSize.inlineAdaptive({ maxHeight: 200 });
 フルスクリーン広告には View がない——生成して表示するものであり、レンダリングするものではない。`createInterstitialAd({ adUnitId, requestOptions })` と `createRewardedAd({ adUnitId, requestOptions })` は、生成した瞬間にロードを開始する `SharedObject` を返す。`createBannerAd` と同様に、React の外——アプリ起動時や画面遷移前——で呼べる。
 
 ```typescript
-import { createInterstitialAd, createRewardedAd } from 'expo-google-mobile-ads';
+import { createInterstitialAd, createRewardedAd } from '@kazutoyo/expo-google-mobile-ads';
 
 export const interstitialAd = createInterstitialAd({
   adUnitId: 'ca-app-pub-3940256099942544/1033173712',
@@ -328,7 +332,7 @@ export const rewardedAd = createRewardedAd({
 | `useRewardedAdState(ad)` | しない（既存の `ad` を購読） | **しない** |
 
 ```tsx
-import { useInterstitialAd } from 'expo-google-mobile-ads';
+import { useInterstitialAd } from '@kazutoyo/expo-google-mobile-ads';
 
 function Screen() {
   const { ad, isLoaded } = useInterstitialAd({
@@ -386,7 +390,7 @@ if (reward) {
   "expo": {
     "plugins": [
       [
-        "expo-google-mobile-ads",
+        "@kazutoyo/expo-google-mobile-ads",
         {
           "androidAppId": "ca-app-pub-xxxx~yyyy",
           "iosAppId": "ca-app-pub-xxxx~zzzz",

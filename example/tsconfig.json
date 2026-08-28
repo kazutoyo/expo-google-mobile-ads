@@ -3,8 +3,8 @@
   "compilerOptions": {
     "strict": true,
     "paths": {
-      "expo-google-mobile-ads": ["../src/index"],
-      "expo-google-mobile-ads/*": ["../src/*"]
+      "@kazutoyo/expo-google-mobile-ads": ["../src/index"],
+      "@kazutoyo/expo-google-mobile-ads/*": ["../src/*"]
     }
   }
 }
