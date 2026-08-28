@@ -2,7 +2,7 @@
 
 *([English](./README.md) | 日本語)*
 
-Expo Modules ネイティブな [Google Mobile Ads (AdMob)](https://developers.google.com/admob) SDK ラッパー。現時点ではバナー広告のみをサポートする。
+Expo Modules ネイティブな [Google Mobile Ads (AdMob)](https://developers.google.com/admob) SDK ラッパー。現時点ではバナー・インタースティシャル・リワード広告をサポートする。
 
 ## なぜこのライブラリか
 
@@ -22,12 +22,14 @@ Android は [GMA Next-Gen SDK](https://developers.google.com/admob/android/next-
 - **New Architecture 専用**。Old Architecture は対象外
 - **Expo SDK 57 以降** — `peerDependencies` で宣言しているため、バージョン不一致のインストールはネイティブビルドまで待たずに npm/yarn の時点で表面化する
 - **iOS 16.4 以降**、**Android minSdk 24 以降**。iOS の下限は広告 SDK ではなく Expo 側の要求である（`ExpoModulesCore` が SDK 56 以降 `:ios => '16.4'` を宣言している）。Google Mobile Ads SDK v13 自体は iOS 13 で足りる。アプリの `ios.deploymentTarget` が 16.4 未満だとこの pod はインストールできない
-- バナー広告のみ（フェーズ1）
+- バナー・インタースティシャル・リワード広告
 
-未対応（今後のフェーズ）:
+未対応:
 
-- UMP（同意管理）— フェーズ2で別途設計する
-- インタースティシャル / リワード / アプリ起動時 / ネイティブ広告 — フェーズ3
+- UMP（同意管理）
+- ネイティブ広告
+- アプリ起動時広告（App Open）
+- リワード広告のサーバーサイド検証
 
 ## インストール
 
@@ -73,7 +75,7 @@ await initialize();
 
 理由は、初期化と UMP の同意取得の順序について Google 自身の案内が割れているため。旧来の案内は「同意取得が先」（`initialize()` がメディエーションアダプタによる広告プリロードを引き起こすため）、現行の案内は「初期化が先でよい」（初期化自体は個人データを処理せず、`canRequestAds()` が true になるまで広告をリクエストしなければポリシー準拠）としている。ここはアプリごとの法務判断が絡みうる領域であり、ネイティブ側で自動初期化してしまうと、揺れている解釈のどちらかをライブラリが勝手に選び、アプリから変更できなくなる。**この順序を決めるのはアプリであってライブラリではない。**
 
-`initialize()` が呼ばれる前に `createBannerAd()` を呼んでもエラーにはならない（ロードは初期化完了まで内部でキューされる）。ただし `initialize()`自体が一度も呼ばれない場合、広告は永久に `loading` のまま止まる。これを検知するため、`initialize()` 未呼び出しの状態で広告を作ると `__DEV__` で警告が出る。
+`initialize()` が呼ばれる前に `createBannerAd()` / `createInterstitialAd()` / `createRewardedAd()` を呼んでもエラーにはならない（ロードは初期化完了まで内部でキューされる）。ただし `initialize()`自体が一度も呼ばれない場合、広告は永久に `loading` のまま止まる。これを検知するため、`initialize()` 未呼び出しの状態で広告を作ると `__DEV__` で警告が出る。
 
 ## プリロード
 
@@ -195,6 +197,81 @@ const size = BannerAdSize.inlineAdaptive({ maxHeight: 200 });
 
 返される `height` は**最大値**であり、最終的な高さではない——実際に配信される広告はそれより低いことがある。ロード後の実寸が必要な場合は、リクエストしたサイズではなく `ad.loadedSize` を使うこと。ロード完了時にこれが実際に届いたサイズを報告し、`adaptiveKind` も引き継いでいるため、`useBannerAd` の `size` オプションにそのまま渡しても無言で固定サイズに劣化することはない。
 
+## インタースティシャル / リワード広告
+
+フルスクリーン広告には View がない——生成して表示するものであり、レンダリングするものではない。`createInterstitialAd({ adUnitId, requestOptions })` と `createRewardedAd({ adUnitId, requestOptions })` は、生成した瞬間にロードを開始する `SharedObject` を返す。`createBannerAd` と同様に、React の外——アプリ起動時や画面遷移前——で呼べる。
+
+```typescript
+import { createInterstitialAd, createRewardedAd } from 'expo-google-mobile-ads';
+
+export const interstitialAd = createInterstitialAd({
+  adUnitId: 'ca-app-pub-3940256099942544/1033173712',
+});
+
+export const rewardedAd = createRewardedAd({
+  adUnitId: 'ca-app-pub-3940256099942544/5224354917',
+});
+```
+
+### hooks
+
+上記のバナー用 hooks と同じ所有権の区分が、2つの広告タイプ分だけある:
+
+| hook | 広告を生成するか | アンマウント時に release するか |
+|---|---|---|
+| `useInterstitialAd(options)` | する | **する** |
+| `useInterstitialAdState(ad)` | しない（既存の `ad` を購読） | **しない** |
+| `useRewardedAd(options)` | する | **する** |
+| `useRewardedAdState(ad)` | しない（既存の `ad` を購読） | **しない** |
+
+```tsx
+import { useInterstitialAd } from 'expo-google-mobile-ads';
+
+function Screen() {
+  const { ad, isLoaded } = useInterstitialAd({
+    adUnitId: 'ca-app-pub-3940256099942544/1033173712',
+  });
+
+  return <Button title="Show ad" disabled={!isLoaded} onPress={() => ad.show()} />;
+}
+```
+
+プリロード済みの広告（上記の `interstitialAd` など）の状態を購読するだけなら、`useInterstitialAdState` / `useRewardedAdState` を使う——どちらも渡された `ad` の生成も release も行わない。呼び出し側が `ad` のライフタイムを管理する。
+
+### 単発利用
+
+フルスクリーン広告は一度しか表示できない。`show()` の後、`status` は `'shown'` になり、これは**終端状態**である——この状態の広告に `load()` を呼んでも何も起きない。両プラットフォームの SDK 自体もこれを独自に強制している（iOS は `AdAlreadyUsed`、Android は `AD_REUSED` を報告する）ため、回避する方法はない。次のインプレッションには `createInterstitialAd` / `createRewardedAd` で新しい広告を作ること。
+
+### `show()`
+
+```typescript
+show(): Promise<void>;             // InterstitialAd
+show(): Promise<AdReward | null>;  // RewardedAd
+```
+
+ユーザーが広告を閉じると resolve する。リワード広告の場合は、ユーザーが獲得した `AdReward` で resolve するか、獲得せずに閉じた場合は `null` で resolve する。
+
+`ShowAdError` で reject し、その `code` は次のいずれかになる:
+
+- `notLoaded` —広告がまだ準備できていない。`show()` を呼ぶ前に `isLoaded` を確認すること
+- `alreadyShown` — この広告の `status` はすでに `'shown'` である
+- `failedToShow` — SDK 自体が表示を拒否した
+
+**`show()` はロード中の広告をあえて待たない。** フルスクリーン広告を「ロードが終わり次第」表示すると、すでに別のことに気を移したユーザーの邪魔をしかねない——これはまさに Google 自身のポリシーガイダンスが警告している挙動である。ロードの後ろに `show()` 呼び出しをキューイングするのではなく、`isLoaded` を確認して、準備できていなければその広告は諦めること。
+
+### `ad.reward` は獲得した証拠ではない
+
+`RewardedAd` の `reward` プロパティは、その広告が**提供するもの**である——ロードが終わり次第、まだ一度も表示されていない時点で読み取れる。これはプロンプトでユーザーに「何がもらえるか」を伝えるためのものだ。**これは報酬を獲得した証拠ではない。** 特に iOS では、この値は広告が表示される前の時点ですでに埋まっているため、その値が存在することだけをもって「ユーザーが広告を視聴した」とみなすと、表示直後に閉じたユーザーにも報酬を与えてしまう。
+
+**報酬が獲得されたかどうかの唯一の正しい情報源は、`show()` が resolve する値である。** 報酬はそこで付与すること——`ad.reward` からは絶対に付与しないこと。
+
+```typescript
+const reward = await rewardedAd.show(); // AdReward | null
+if (reward) {
+  // `reward.amount` 個の `reward.type` を付与する
+}
+```
+
 ## メディエーション
 
 このライブラリはメディエーションアダプタのバージョンを固定した「キュレート済みリスト」を持たない。アダプタのバージョンは頻繁に更新され、ライブラリ側で固定すると陳腐化する保守負債になるためである。代わりに config plugin に素の指定口を用意しており、必要な依存関係を自分で指定する。
@@ -267,22 +344,44 @@ export type { AdaptiveOptions, BannerAdAdaptiveKind, BannerAdSizeSpec, InlineAda
 export function initialize(): Promise<InitializationStatus>;
 export function setRequestConfiguration(config: RequestConfiguration): void;
 
-// hooks
+// バナー hooks
 export function useBannerAd(options: BannerAdOptions): BannerAdState & { ad: BannerAd };
 export function useBannerAdState(ad: BannerAd): BannerAdState;
 export type { BannerAdState };
 export function useBannerAdSize(spec: BannerAdSizeSpec): BannerAdSize;
 
+// インタースティシャル広告
+export function createInterstitialAd(options: FullScreenAdOptions): InterstitialAd;
+export type { InterstitialAd, FullScreenAdEvents };
+
+// リワード広告
+export function createRewardedAd(options: FullScreenAdOptions): RewardedAd;
+export type { RewardedAd, RewardedAdEvents };
+
+// フルスクリーン広告（共通）
+export class ShowAdError extends Error { code: ShowAdErrorCode; }
+export type { FullScreenAdOptions };
+
+// フルスクリーン広告 hooks
+export function useInterstitialAd(options: FullScreenAdOptions): FullScreenAdState & { ad: InterstitialAd };
+export function useInterstitialAdState(ad: InterstitialAd): FullScreenAdState;
+export type { FullScreenAdState };
+export function useRewardedAd(options: FullScreenAdOptions): FullScreenAdState & { ad: RewardedAd };
+export function useRewardedAdState(ad: RewardedAd): FullScreenAdState;
+
 // 型
 export type {
   AdError,
+  AdReward,
   AdapterResponse,
   BannerAdStatus,
+  FullScreenAdStatus,
   InitializationStatus,
   PaidEventValue,
   RequestConfiguration,
   RequestOptions,
   ResponseInfo,
+  ShowAdErrorCode,
 };
 ```
 
