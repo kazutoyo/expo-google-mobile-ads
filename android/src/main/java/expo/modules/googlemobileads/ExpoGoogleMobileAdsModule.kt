@@ -289,19 +289,13 @@ class ExpoGoogleMobileAdsModule : Module() {
     // Reading consent state needs only a Context, not an Activity, so this one never produces
     // `noActivity`. It stays async because iOS's equivalent is main-thread-only.
     AsyncFunction("getConsentInfoAsync") { promise: Promise ->
-      val context = appContext.reactContext
-      if (context == null) {
-        promise.reject("internal", "The React context is gone.", null)
-      } else {
+      withMainConsentContext(promise) { context ->
         promise.resolve(consentSnapshot(context))
       }
     }
 
     AsyncFunction("resetConsentAsync") { promise: Promise ->
-      val context = appContext.reactContext
-      if (context == null) {
-        promise.reject("internal", "The React context is gone.", null)
-      } else {
+      withMainConsentContext(promise) { context ->
         consentInformation(context).reset()
         promise.resolve(consentSnapshot(context))
       }
@@ -416,5 +410,22 @@ class ExpoGoogleMobileAdsModule : Module() {
       }
       block(activity)
     }
+  }
+
+  /**
+   * Resolves the React context and runs [block] with it on the main thread, rejecting [promise]
+   * with `internal` if the context is already gone.
+   *
+   * Unlike [withMainConsentActivity], a missing [Context] is not a normal "not ready yet" state
+   * (a `Context` outlives any single `Activity`), so it is checked before hopping to main rather
+   * than inside the posted block — no point scheduling work for a promise already dead.
+   */
+  private fun withMainConsentContext(promise: Promise, block: (Context) -> Unit) {
+    val context = appContext.reactContext
+    if (context == null) {
+      promise.reject("internal", "The React context is gone.", null)
+      return
+    }
+    mainHandler.post { block(context) }
   }
 }
