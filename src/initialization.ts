@@ -52,7 +52,7 @@ export function runWhenInitialized(
 ): void {
   if (__DEV__ && !queue.isInitializeCalled()) {
     console.warn(
-      '[expo-google-mobile-ads] initialize() has not been called, so the ad load will not start. ' +
+      '[@kazutoyo/expo-google-mobile-ads] initialize() has not been called, so the ad load will not start. ' +
         'Call initialize() when your app starts.'
     );
   }

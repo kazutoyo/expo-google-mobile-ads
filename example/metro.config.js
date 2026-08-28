@@ -20,7 +20,7 @@ config.resolver.nodeModulesPaths = [
 ];
 
 config.resolver.extraNodeModules = {
-  'expo-google-mobile-ads': '..',
+  '@kazutoyo/expo-google-mobile-ads': '..',
 };
 
 config.watchFolders = [path.resolve(__dirname, '..')];
