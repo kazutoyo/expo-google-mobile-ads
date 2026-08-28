@@ -229,28 +229,28 @@ class FullScreenAd: SharedObject {
   func showAsync(_ promise: Promise) {
     DispatchQueue.main.async { [self] in
       if isReleased {
-        promise.reject(
+        promise.reject(AdException(
           "ERR_AD_RELEASED",
-          "The ad was released before it could be shown.")
+          "The ad was released before it could be shown."))
         return
       }
       if showPromise != nil {
         // Two overlapping show() calls. JS gates on `status`, but both calls can pass that gate
         // before either reaches native, so reject the second rather than orphaning the first
         // promise (the SDK would also fail this with AdAlreadyUsed, but only asynchronously).
-        promise.reject(
+        promise.reject(AdException(
           "ERR_AD_ALREADY_PRESENTING",
-          "This ad is already being presented.")
+          "This ad is already being presented."))
         return
       }
       // `currentViewController()` means "the frontmost view controller right now", so resolving it
       // at construction time would leave it nil for an ad preloaded before any view controller
       // exists, or stale after a modal closed. Resolved fresh at show time, every time.
       guard let viewController = resolveRootViewController() else {
-        promise.reject(
+        promise.reject(AdException(
           "ERR_NO_VIEW_CONTROLLER",
           "Could not show the ad because no visible view controller was found. "
-            + "Try again after the app has finished launching.")
+            + "Try again after the app has finished launching."))
         return
       }
 
@@ -261,9 +261,9 @@ class FullScreenAd: SharedObject {
       let presented = MainActor.assumeIsolated { presentAd(from: viewController) }
       if !presented {
         showPromise = nil
-        promise.reject(
+        promise.reject(AdException(
           "ERR_AD_NOT_AVAILABLE",
-          "Could not show the ad because it is no longer available.")
+          "Could not show the ad because it is no longer available."))
       }
     }
   }
@@ -325,7 +325,8 @@ class FullScreenAd: SharedObject {
       // The delegate is about to be cleared, so neither a dismissal nor a presentation failure is
       // going to arrive for an in-flight show(). Settle it here or it never settles.
       settleShowPromise {
-        $0.reject("ERR_AD_RELEASED", "The ad was released while it was being shown.")
+        $0.reject(AdException(
+          "ERR_AD_RELEASED", "The ad was released while it was being shown."))
       }
       tearDownAd()
     }
@@ -355,9 +356,28 @@ class FullScreenAd: SharedObject {
   }
 
   fileprivate func handleFailToPresent(_ error: Error) {
-    setStatus("error", error: errorToDictionary(error))
+    // **A presentation failure must never move the ad out of `"shown"`** — the same rule, and the
+    // same reason, as `shouldDiscardLoadResult`. Reachable by calling the `@internal` `showAsync()`
+    // on an already-shown ad: GMA answers with `AdAlreadyUsed` (18) and this callback fires while
+    // the status is still the terminal `"shown"`. Recording it would park the ad on `"error"`,
+    // where `load()`'s terminal guard — which tests only `status == "shown"` — no longer refuses,
+    // so one JS object could be loaded and shown a second time. On rewarded that is the real-money
+    // bug the whole invariant exists to prevent.
+    //
+    // The guard belongs *here*, in the failure callback, rather than at the entry to `showAsync()`.
+    // This is the single point every presentation failure passes through, whatever produced it —
+    // including a failure that arrives after `adWillPresentFullScreenContent` has already set
+    // `"shown"` for that very presentation, which no entry check could catch. An entry check would
+    // also only restate JS's `assertShowable`, and would leave this path open.
+    //
+    // Discarding the whole record rather than keeping the error alongside `"shown"` matches
+    // `handleLoadFailed`: no status change, no `statusChange` event, nothing for JS to observe. The
+    // promise is still rejected below — the caller is never left hanging.
+    if status != "shown" {
+      setStatus("error", error: errorToDictionary(error))
+    }
     settleShowPromise {
-      $0.reject("ERR_AD_SHOW_FAILED", (error as NSError).localizedDescription)
+      $0.reject(AdException("ERR_AD_SHOW_FAILED", (error as NSError).localizedDescription))
     }
   }
 
@@ -368,6 +388,37 @@ class FullScreenAd: SharedObject {
   fileprivate func handleClick() {
     emit(event: "clicked")
   }
+}
+
+/// An `Exception` whose message actually survives the trip to JavaScript.
+///
+/// `Promise.reject(_ code: String, _ description: String)` builds `Exception(name: code,
+/// description: description, code: code)`. That stores the text in `description`, but nothing on
+/// the way to JS reads it: JS gets `JavaScriptThrowable.message`, whose protocol-extension default
+/// is `String(reflecting: self)` — i.e. `Exception.debugDescription`, `"<name>: <reason> (at
+/// <file>:<line>)"` — and `reason` on the base class is the literal `"undefined reason"`. Every
+/// rejection therefore arrived in JS as `"ERR_…: undefined reason (at
+/// ExpoModulesCore/Promise.swift:65)"`, losing the one thing a caller catching `ShowAdError` needs.
+///
+/// `reason` and `debugDescription` are both `open` on `Exception`, so overriding them is a real
+/// class override and is dispatched dynamically. `message` is *not* — it is satisfied by a protocol
+/// extension default, and a witness table is built for `Exception`, so re-declaring `message` in a
+/// subclass would never be reached. Overriding `debugDescription` is what puts the bare text in
+/// front of JS, which is exactly what Android's `Promise.reject(code, message, null)` already
+/// delivers: same failure, same string, both platforms.
+/// `@unchecked Sendable` is restated because Swift requires a subclass to repeat an inherited
+/// unchecked conformance; the one stored property is an immutable `String`.
+final class AdException: Exception, @unchecked Sendable {
+  private let text: String
+
+  init(_ code: String, _ text: String) {
+    self.text = text
+    super.init(name: code, description: text, code: code)
+  }
+
+  override var reason: String { text }
+
+  override var debugDescription: String { text }
 }
 
 /// The error reported when a load completion handler hands back neither an ad nor an error. The
