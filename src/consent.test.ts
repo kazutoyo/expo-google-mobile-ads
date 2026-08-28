@@ -1,3 +1,15 @@
+jest.mock('./ExpoGoogleMobileAdsModule', () => ({
+  __esModule: true,
+  default: {
+    gatherConsentAsync: jest.fn(),
+    requestConsentInfoUpdateAsync: jest.fn(),
+    showConsentFormIfRequiredAsync: jest.fn(),
+    showPrivacyOptionsFormAsync: jest.fn(),
+    getConsentInfoAsync: jest.fn(),
+    resetConsentAsync: jest.fn(),
+  },
+}));
+
 import NativeModule from './ExpoGoogleMobileAdsModule';
 import {
   ConsentError,
@@ -10,18 +22,6 @@ import {
 } from './consent';
 import { UNKNOWN_CONSENT_INFO, getConsentInfoSnapshot, __resetForTesting } from './consentStore';
 import type { ConsentInfo } from './types';
-
-jest.mock('./ExpoGoogleMobileAdsModule', () => ({
-  __esModule: true,
-  default: {
-    gatherConsentAsync: jest.fn(),
-    requestConsentInfoUpdateAsync: jest.fn(),
-    showConsentFormIfRequiredAsync: jest.fn(),
-    showPrivacyOptionsFormAsync: jest.fn(),
-    getConsentInfoAsync: jest.fn(),
-    resetConsentAsync: jest.fn(),
-  },
-}));
 
 const mockNative = NativeModule as jest.Mocked<typeof NativeModule>;
 
