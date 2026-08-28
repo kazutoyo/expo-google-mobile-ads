@@ -197,6 +197,98 @@ from the instrumented size reconstruction, which covers every card, plus the mai
 new anchored-orientation cards *rendering* on Android was not obtained. The fixed and inline
 rows had already been captured visually in the earlier run log.
 
+## Full-screen ads (interstitial / rewarded)
+
+Press "Show the full-screen ad QA screen". Every button below maps to one item. Each ad's `status`
+is on screen, the rewarded cards also show the **offered** reward, and every event and promise
+settlement is appended to the on-screen log and to the console (`adb logcat -v time` on Android;
+on iOS these lines do **not** reach the system log, so the Metro console is the only timestamped
+record — see the note at the end).
+
+Full-screen ads are **single-use**: after `show()` the status is `'shown'` and stays there. An ad
+can therefore be used for exactly one of these items. To get fresh ads:
+
+- the two `use…Ad` ads are recreated by leaving this screen and coming back,
+- the module-scope ads (`preloaded …`, `overlap`) are recreated by restarting the app.
+
+Run the items in the order given — several of them depend on the ad reaching `shown` first.
+
+- [ ] 1. **A preloaded interstitial presents and `show()` resolves on dismissal.** "Show preloaded
+      interstitial" → the ad appears; on close, `show() RESOLVED with undefined`.
+- [ ] 2. **`status` goes `loading` → `loaded` → `shown`.** The two hook-created cards show
+      `loading` → `loaded` on mount; any ad shows `→ shown` when presented.
+- [ ] 3. **`show()` on a still-loading ad rejects `notLoaded` without presenting anything.** "Show
+      an ad that is still loading" creates an ad and shows it in the same tick. Nothing must appear
+      on screen.
+- [ ] 4. **`show()` on an already-shown ad rejects `alreadyShown`.** Run item 1 first, then "Show
+      the preloaded interstitial again".
+- [ ] 5. **A rewarded ad watched to completion resolves `{type, amount}` and emits `earnedReward`.**
+- [ ] 6. **`ad.reward` is readable before showing, and is labelled as *offered*, not earned.** The
+      rewarded cards read it during render; it is `none yet` until the ad loads.
+- [ ] 7. **`showed`, `dismissed`, `impression`, `clicked` and `paid` all arrive.** `clicked` needs a
+      tap on the ad creative, which leaves the app — come back and close the ad.
+- [ ] 8. **`load()` on a shown ad is a no-op.** "load() on the shown interstitial" logs the status
+      before and 3 s after: both must read `shown`, with the same `responseId` and no `statusChange`.
+- [ ] 9. **An ad created before `initialize()` resolves still loads.** Set `INITIALIZE_DELAY_MS =
+      5000` in `App.tsx` and restart the app. The module-scope ads are created first (a `__DEV__`
+      warning per ad), and must reach `loaded` after `initialize() resolved`.
+- [ ] 10. **Backgrounding the app with an ad on screen does not wedge the promise.** Show an ad,
+      press Home, return. `show()` must settle.
+
+### Guard cases that only a deliberate setup reaches
+
+- [ ] A. **A rewarded ad dismissed without earning resolves `null`.** Google's test creative grants
+      the reward ~8 s in and blocks dismissal until then, so this cannot be raced. It needs a
+      **temporary instrumented build**: comment out `_didEarnReward = true` in
+      `ios/RewardedAd.swift` / `earnedReward.set(earned)` in `android/…/RewardedAd.kt`, rebuild,
+      watch a rewarded ad to the end, and confirm `show()` resolves `null` even though
+      `earnedReward` fired. **Revert and rebuild afterwards**, and confirm the reward comes back.
+- [ ] B. **A load that lands during a presentation is discarded** (`shouldDiscardLoadResult`).
+      "Overlapping load during a presentation" starts two loads 150 ms apart and presents the ad
+      the instant the first lands, so the other request completes while the ad is on screen. The
+      presenting ad must still dismiss, `show()` must still resolve, the events must still arrive,
+      and `status` must stay `shown` with an unchanged `responseId` and no further `statusChange`.
+- [ ] C. **A presentation failure rejects instead of hanging.** Two routes:
+      - "show() twice in one tick": both calls pass the JS `status === 'loaded'` gate, so the second
+        reaches native and is rejected as "already presenting" → `failedToShow`. The first must
+        still resolve on dismissal.
+      - "Force an SDK presentation failure on a shown ad": calls the internal `showAsync()` on an
+        already-shown ad, bypassing the JS guard, so the SDK itself refuses it
+        (`AdAlreadyUsed` / `AD_REUSED`).
+
+### Run log (2026-08-28, full-screen ads)
+
+iOS 26 / iPhone 17 simulator and Android 16 / Pixel 9a emulator, Google test ad units.
+Full write-up: `.superpowers/sdd/2026-08-28-fullscreen-ads/task-8-report.md`.
+
+| # | iOS | Android |
+|---|---|---|
+| 1 | PASS — resolved `undefined` on close | PASS |
+| 2 | PASS | PASS |
+| 3 | PASS — `notLoaded`, nothing presented | PASS |
+| 4 | PASS — `alreadyShown` | PASS |
+| 5 | PASS — `{"type":"coins","amount":10}` + `earnedReward` | PASS |
+| 6 | PASS — `coins x10` before show, `none yet` while loading | PASS |
+| 7 | PASS — all five | PASS — all five |
+| 8 | PASS — `shown` → `shown`, same `responseId` | PASS |
+| 9 | PASS | PASS |
+| 10 | PASS — ad stayed up, resolved on close | PASS — SDK dismissed the ad, promise resolved |
+| A | PASS (instrumented) — resolved `null` | PASS (instrumented) — resolved `null` |
+| B | PASS | PASS |
+| C | PASS both routes | PASS both routes |
+
+Two findings, neither fixed here:
+
+- **iOS loses the rejection message.** `Promise.reject(code, description)` in ExpoModulesCore
+  builds an `Exception` whose `reason` stays `"undefined reason"`, so every native rejection from
+  `showAsync()` arrives in JS as `… undefined reason (at ExpoModulesCore/Promise.swift:65)`.
+  `ShowAdError.code` is still right; only `message` is useless, and only for `failedToShow`
+  (`notLoaded` / `alreadyShown` are built in JS). Android reports the real text.
+- **A forced `showAsync()` on a shown ad walks `shown` → `error`.** `handleFailToPresent` records
+  the presentation failure unconditionally. Not reachable through the public `show()`, which
+  rejects `alreadyShown` first; recorded because it makes the terminal status non-terminal for
+  anyone calling the `@internal` method.
+
 ## Run log
 
 For each item, record which platform it was run on, the actual result, and (if relevant) the
