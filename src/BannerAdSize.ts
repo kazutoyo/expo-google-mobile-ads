@@ -139,6 +139,16 @@ export const BannerAdSize = {
    * inline adaptive size is orientation-independent on both platforms.
    */
   inlineAdaptive(options: InlineAdaptiveOptions): BannerAdSize {
+    // Neither SDK rejects a non-positive max height where it can be reported usefully: iOS just
+    // yields a size that can never serve, and Android's `getInlineAdaptiveBannerAdSize` accepts
+    // it and then throws `IllegalArgumentException` from inside its main-thread load callback.
+    // Both native constructors refuse it too (a hand-built size object never passes through
+    // here), but catching it at the call site is what points at the actual mistake.
+    if (!(options.maxHeight > 0)) {
+      throw new Error(
+        `inlineAdaptive requires a positive maxHeight (at least 32dp; 50dp or more is recommended), got ${options.maxHeight}`
+      );
+    }
     const size = NativeModule.getInlineAdaptiveSize(
       options.width ?? screenWidth(),
       options.maxHeight

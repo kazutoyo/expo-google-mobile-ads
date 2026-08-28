@@ -20,7 +20,8 @@ Android は [GMA Next-Gen SDK](https://developers.google.com/admob/android/next-
 ## サポート範囲
 
 - **New Architecture 専用**。Old Architecture は対象外
-- **Expo SDK 54 以降**
+- **Expo SDK 57 以降** — `peerDependencies` で宣言しているため、バージョン不一致のインストールはネイティブビルドまで待たずに npm/yarn の時点で表面化する
+- **iOS 16.4 以降**、**Android minSdk 24 以降**。iOS の下限は広告 SDK ではなく Expo 側の要求である（`ExpoModulesCore` が SDK 56 以降 `:ios => '16.4'` を宣言している）。Google Mobile Ads SDK v13 自体は iOS 13 で足りる。アプリの `ios.deploymentTarget` が 16.4 未満だとこの pod はインストールできない
 - バナー広告のみ（フェーズ1）
 
 未対応（今後のフェーズ）:
@@ -216,7 +217,7 @@ const size = BannerAdSize.inlineAdaptive({ maxHeight: 200 });
             "https://artifact.bytedance.com/repository/pangle/"
           ],
           "iosPods": {
-            "GoogleMobileAdsMediationAppLovin": "13.6.4.0"
+            "GoogleMobileAdsMediationAppLovin": "13.6.3.0"
           }
         }
       ]
@@ -224,6 +225,10 @@ const size = BannerAdSize.inlineAdaptive({ maxHeight: 200 });
   }
 }
 ```
+
+上の例で Android と iOS のバージョンが異なっているのは意図的である。両アダプタは独立にバージョニングされており、しばしば食い違う。**片方のプラットフォームの番号をもう片方に流用してはならない。** それぞれ自分の changelog から読むこと。
+
+**changelog を読むときは「(In progress)」に注意する。** Google のアダプタ changelog は、まだリリースされていない*次の*バージョンを最上段に `(In progress)` 付きで載せている。一番上の番号をそのまま取ると存在しないバージョンを指すことになり、`pod install` や Gradle の解決に失敗する。`(In progress)` の見出しがある場合は、その*下*の最初のエントリを取ること。
 
 **バージョンは動く — ここからコピーしたまま放置しないこと。** 各ネットワークの現在のバージョンは、追加する時点で下記の changelog から取得する。他のネットワークについては、下表のアーティファクト ID（Android）または pod 名（iOS）に、changelog が示す時点のバージョンを添えて追加する。
 

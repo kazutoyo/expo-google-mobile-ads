@@ -31,6 +31,22 @@ class InvalidBannerSizeException :
   CodedException(message = "BannerAd's size requires numeric width and height")
 
 /**
+ * Thrown when an inline adaptive size carries a non-positive `height` (the max height).
+ *
+ * `AdSize.getInlineAdaptiveBannerAdSize(width, maxHeight)` accepts `maxHeight <= 0` and only
+ * raises `IllegalArgumentException` later, from inside the main-thread Runnable that builds the
+ * request in `BannerAd.load()` — far from the call that caused it, and out of reach of the JS
+ * caller's try/catch. Reject it at construction instead, where it can be reported properly.
+ *
+ * iOS carries the identical guard (`InvalidInlineMaxHeightException` in BannerAd.swift), so the
+ * same bad size is refused with the same message on both platforms.
+ */
+class InvalidInlineMaxHeightException :
+  CodedException(
+    message = "An inline adaptive banner requires a positive maxHeight (at least 32dp; 50dp or more is recommended)"
+  )
+
+/**
  * [Review fix — I4] Bundles `status`/`error`/`loadedSize`/`responseInfo` into a single
  * immutable snapshot exposed through one `@Volatile` reference. Marking each field
  * `@Volatile` individually would guarantee per-field visibility, but not consistency across
@@ -79,6 +95,14 @@ class BannerAd(
   private val adaptiveKind: BannerAdSizeKind?,
   private val requestOptions: Map<String, Any?>?
 ) : SharedObject(appContext) {
+
+  init {
+    // See [InvalidInlineMaxHeightException]: for an inline size, `requestedHeight` is the max
+    // height, and a non-positive one would only blow up much later inside `load()`'s Runnable.
+    if (adaptiveKind == BannerAdSizeKind.INLINE && requestedHeight <= 0) {
+      throw InvalidInlineMaxHeightException()
+    }
+  }
 
   val requestedSizeMap: Map<String, Any?> = buildMap {
     put("width", requestedWidth)
@@ -326,7 +350,26 @@ class BannerAd(
         }
       }
 
-      override fun onAdFailedToRefresh(adError: LoadAdError) = onAdFailed(adError)
+      /**
+       * A refresh failure is a degradation, not a failure — exactly like the null branch of
+       * [onAdRefreshed] above. The banner that loaded successfully before this is still on
+       * screen and still valid; the next refresh tick may well succeed. Delegating to
+       * [onAdFailed] would set `status: "error"`, and the documented
+       * `{isLoaded && <BannerAdView/>}` pattern would then unmount a working banner. So leave
+       * the state untouched and only log.
+       *
+       * iOS cannot make this distinction: GMA v13 routes both the initial and the auto-refresh
+       * failure through the single `bannerView(_:didFailToReceiveAdWithError:)`. That is an SDK
+       * limitation on that platform, not a reason to reproduce the bug here where Android does
+       * hand us a dedicated callback.
+       */
+      override fun onAdFailedToRefresh(adError: LoadAdError) {
+        Log.w(
+          TAG,
+          "A banner ad auto-refresh failed (code ${adError.code.value}: ${adError.message}). " +
+            "The currently displayed banner remains valid; the next refresh may succeed."
+        )
+      }
     }
 
     emitStatusChange()

@@ -109,11 +109,20 @@ const withGoogleMobileAds: ConfigPlugin<Options> = (config, options = {}) => {
       appId
     );
 
+    // Both directions, deliberately. A prebuild runs against whatever manifest is already on
+    // disk, so flipping this option back to false has to actively take the key out again —
+    // otherwise the setting sticks forever and the app keeps delaying measurement init with
+    // nothing in app.json saying so. Same class of bug as the maven-repository idempotency one.
     if (options.delayAppMeasurementInit) {
       AndroidConfig.Manifest.addMetaDataItemToMainApplication(
         application,
         'com.google.android.gms.ads.DELAY_APP_MEASUREMENT_INIT',
         'true'
+      );
+    } else {
+      AndroidConfig.Manifest.removeMetaDataItemFromMainApplication(
+        application,
+        'com.google.android.gms.ads.DELAY_APP_MEASUREMENT_INIT'
       );
     }
 
@@ -122,8 +131,12 @@ const withGoogleMobileAds: ConfigPlugin<Options> = (config, options = {}) => {
 
   config = withInfoPlist(config, (cfg) => {
     cfg.modResults.GADApplicationIdentifier = validateAppId(options.iosAppId, 'ios');
+    // See the manifest counterpart above: the key has to be removed when the option is off, or a
+    // stale `true` survives in the Info.plist of an already-prebuilt project.
     if (options.delayAppMeasurementInit) {
       cfg.modResults.GADDelayAppMeasurementInit = true;
+    } else {
+      delete cfg.modResults.GADDelayAppMeasurementInit;
     }
     return cfg;
   });

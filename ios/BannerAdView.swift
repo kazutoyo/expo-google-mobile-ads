@@ -42,6 +42,12 @@ final class BannerAdView: ExpoView {
     bannerView.rootViewController = appContext?.utilities?.currentViewController()
     ad.currentAttachment = self
     addSubview(bannerView)
+    // The frame is only assigned in `layoutSubviews()`, and `addSubview` alone does not schedule
+    // one on this view. Two paths reach `setAd` on a view that has already been laid out and
+    // would otherwise leave the banner at its intrinsic frame: `deinit`'s handback, and a
+    // preloaded ad attached after the host finished layout. Android calls `requestLayout()` at
+    // exactly this point; this is its counterpart.
+    setNeedsLayout()
   }
 
   /// Removes the ad from the view only if this view is still its owner.

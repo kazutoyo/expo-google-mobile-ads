@@ -154,11 +154,31 @@ describe('useBannerAd', () => {
     expect(result.current.ad).toBe(ad);
   });
 
-  it('includes adUnitId and size in the dependency array', async () => {
+  // `toEqual` treats a trailing `undefined` as absent, so asserting three entries would pass
+  // even if `adaptiveKind` were dropped from the dependency array. Pin all four explicitly.
+  it('includes adUnitId, size and adaptiveKind in the dependency array', async () => {
     mockUseReleasingSharedObject.mockReturnValue(makeAd());
 
     await renderHook(() => useBannerAd({ adUnitId: 'unit', size }));
 
-    expect(mockUseReleasingSharedObject.mock.calls[0][1]).toEqual(['unit', 360, 50]);
+    expect(mockUseReleasingSharedObject.mock.calls[0][1]).toEqual(['unit', 360, 50, undefined]);
+    expect(mockUseReleasingSharedObject.mock.calls[0][1]).toHaveLength(4);
+  });
+
+  // An adaptive size can share width and height with a fixed one, so adaptiveKind is what keeps
+  // the ad from being recreated as (or left as) the wrong kind of request.
+  it('carries adaptiveKind into the dependency array', async () => {
+    mockUseReleasingSharedObject.mockReturnValue(makeAd());
+
+    await renderHook(() =>
+      useBannerAd({ adUnitId: 'unit', size: { ...size, adaptiveKind: 'anchoredPortrait' } })
+    );
+
+    expect(mockUseReleasingSharedObject.mock.calls[0][1]).toEqual([
+      'unit',
+      360,
+      50,
+      'anchoredPortrait',
+    ]);
   });
 });

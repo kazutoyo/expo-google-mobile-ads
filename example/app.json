@@ -19,9 +19,6 @@
       "predictiveBackGestureEnabled": false,
       "package": "expo.modules.googlemobileads.example"
     },
-    "web": {
-      "favicon": "./assets/favicon.png"
-    },
     "plugins": [
       [
         "expo-google-mobile-ads",

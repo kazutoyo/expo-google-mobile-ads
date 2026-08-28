@@ -100,6 +100,17 @@ describe('inlineAdaptive', () => {
     });
   });
 
+  // A non-positive max height reaches the SDK otherwise: Android's
+  // getInlineAdaptiveBannerAdSize() accepts it and then throws IllegalArgumentException from
+  // inside the main-thread load callback, far from the call that caused it.
+  it.each([0, -1, NaN, undefined as unknown as number])(
+    'rejects a non-positive maxHeight (%p) before reaching the native side',
+    (maxHeight) => {
+      expect(() => BannerAdSize.inlineAdaptive({ maxHeight })).toThrow(/positive maxHeight/);
+      expect(mockNative.getInlineAdaptiveSize).not.toHaveBeenCalled();
+    }
+  );
+
   it('leaves the fixed sizes unmarked', () => {
     expect(BannerAdSize.BANNER.adaptiveKind).toBeUndefined();
     expect(BannerAdSize.LEADERBOARD.adaptiveKind).toBeUndefined();

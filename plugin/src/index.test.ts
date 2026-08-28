@@ -1,9 +1,27 @@
-import {
+import withGoogleMobileAds, {
   injectAndroidDependencies,
   injectAndroidMavenRepositories,
   injectIosPods,
   validateAppId,
 } from './index';
+
+// Only the `with*` wrappers are stubbed — they normally defer the callback until prebuild, which
+// a unit test has no way to reach. `AndroidConfig` stays real, so the manifest helpers the plugin
+// relies on are part of what's under test. (babel-plugin-jest-hoist lifts this above the import
+// above, so `./index` still sees the mock.)
+jest.mock('expo/config-plugins', () => {
+  const actual = jest.requireActual('expo/config-plugins');
+  return {
+    ...actual,
+    withAndroidManifest: (config: any, action: any) =>
+      action({ ...config, modResults: config.__androidManifest }),
+    withInfoPlist: (config: any, action: any) =>
+      action({ ...config, modResults: config.__infoPlist }),
+    withAppBuildGradle: (config: any) => config,
+    withProjectBuildGradle: (config: any) => config,
+    withDangerousMod: (config: any) => config,
+  };
+});
 
 describe('validateAppId', () => {
   it('accepts the correct format', () => {
@@ -72,5 +90,70 @@ describe('injectIosPods', () => {
     const once = injectIosPods(podfile, pods);
     const twice = injectIosPods(once, pods);
     expect(twice.match(/Google-Mobile-Ads-SDK/g)).toHaveLength(1);
+  });
+});
+
+describe('delayAppMeasurementInit', () => {
+  const ANDROID_KEY = 'com.google.android.gms.ads.DELAY_APP_MEASUREMENT_INIT';
+
+  type State = { androidManifest: any; infoPlist: Record<string, any> };
+
+  function freshState(): State {
+    return {
+      androidManifest: {
+        manifest: { application: [{ $: { 'android:name': '.MainApplication' } }] },
+      },
+      infoPlist: {},
+    };
+  }
+
+  /** Runs the plugin against `state`, mutating it the way a prebuild would. */
+  function runPlugin(delayAppMeasurementInit: boolean | undefined, state = freshState()): State {
+    withGoogleMobileAds(
+      {
+        __androidManifest: state.androidManifest,
+        __infoPlist: state.infoPlist,
+      } as any,
+      {
+        androidAppId: 'ca-app-pub-3940256099942544~3347511713',
+        iosAppId: 'ca-app-pub-3940256099942544~1458002511',
+        delayAppMeasurementInit,
+      }
+    );
+    return state;
+  }
+
+  function metaDataValue(androidManifest: any, name: string): string | undefined {
+    const items = androidManifest.manifest.application[0]['meta-data'] ?? [];
+    return items.find((item: any) => item.$['android:name'] === name)?.$['android:value'];
+  }
+
+  it('adds the manifest meta-data and the plist key when enabled', () => {
+    const state = runPlugin(true);
+
+    expect(metaDataValue(state.androidManifest, ANDROID_KEY)).toBe('true');
+    expect(state.infoPlist.GADDelayAppMeasurementInit).toBe(true);
+  });
+
+  // A prebuild runs against whatever is already on disk. Without the removal branch, turning the
+  // option back off left both keys in place and the setting silently stayed on forever.
+  it('removes both again when the option is turned back off', () => {
+    const state = runPlugin(true);
+    runPlugin(false, state);
+
+    expect(metaDataValue(state.androidManifest, ANDROID_KEY)).toBeUndefined();
+    expect('GADDelayAppMeasurementInit' in state.infoPlist).toBe(false);
+    // The app ID must survive the removal — only the delay key goes.
+    expect(metaDataValue(state.androidManifest, 'com.google.android.gms.ads.APPLICATION_ID')).toBe(
+      'ca-app-pub-3940256099942544~3347511713'
+    );
+    expect(state.infoPlist.GADApplicationIdentifier).toBe('ca-app-pub-3940256099942544~1458002511');
+  });
+
+  it('adds neither when the option was never set', () => {
+    const state = runPlugin(undefined);
+
+    expect(metaDataValue(state.androidManifest, ANDROID_KEY)).toBeUndefined();
+    expect('GADDelayAppMeasurementInit' in state.infoPlist).toBe(false);
   });
 });

@@ -20,7 +20,12 @@ Android uses the [GMA Next-Gen SDK](https://developers.google.com/admob/android/
 ## Scope
 
 - **New Architecture only.** Old Architecture is not supported.
-- **Expo SDK 54+**
+- **Expo SDK 57+** — declared as a `peerDependencies` constraint, so npm/yarn surfaces a
+  mismatched install instead of failing later in the native build.
+- **iOS 16.4+**, **Android minSdk 24+**. The iOS floor comes from Expo itself
+  (`ExpoModulesCore` declares `:ios => '16.4'` from SDK 56 on), not from the ads SDK — Google
+  Mobile Ads SDK v13 only needs iOS 13. An app whose `ios.deploymentTarget` is lower than 16.4
+  cannot install this pod.
 - Banner ads only (phase 1)
 
 Not yet supported (future phases):
@@ -216,7 +221,7 @@ The example below uses AppLovin as a fully worked reference — a real, current 
             "https://artifact.bytedance.com/repository/pangle/"
           ],
           "iosPods": {
-            "GoogleMobileAdsMediationAppLovin": "13.6.4.0"
+            "GoogleMobileAdsMediationAppLovin": "13.6.3.0"
           }
         }
       ]
@@ -224,6 +229,15 @@ The example below uses AppLovin as a fully worked reference — a real, current 
   }
 }
 ```
+
+Note that the Android and iOS versions above deliberately differ. The two adapters are versioned
+independently and are frequently out of step, so **never copy one platform's number onto the
+other**. Read each from its own changelog.
+
+**Watch for "(In progress)" when you read a changelog.** Google's adapter changelogs list the
+*next*, unreleased version at the very top, marked `(In progress)`. Taking the topmost number
+gets you a version that does not exist yet, and `pod install` / Gradle resolution fails. Take the
+first entry *below* any `(In progress)` heading.
 
 **Versions move — don't copy one from here and forget it.** Get the current version for any network from its changelog, linked below, at the time you add it. For the other networks, add the matching artifact id (Android) or pod name (iOS) from the table with the version the changelog currently lists.
 

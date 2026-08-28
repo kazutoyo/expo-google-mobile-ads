@@ -59,8 +59,8 @@ adaptive" flag (`GADAdSize.flags` / `AdSize.isInlineAdaptiveBanner`) was dropped
 native side rebuilt a *fixed* ad size. iOS's no-max-height helper returns height `0` as a
 sentinel, Android's returns the whole screen height. `maxHeight` is now required and the
 flag now crosses the boundary, so both platforms request a genuine inline adaptive banner of
-`width x maxHeight`. Full write-up:
-`.superpowers/sdd/2026-08-27-banner-ad-api/inline-adaptive-report.md`.
+`width x maxHeight`. The measurements above are the finding; they were taken by logging the
+rebuilt native ad size on both platforms with and without the marker.
 
 ### The adaptive flag on the rebuilt ad size (fixed 2026-08-27)
 
@@ -85,8 +85,9 @@ instrumenting the size reconstruction, one ad per gallery card:
 nested: the large variant sets only the second.)
 
 Before the fix every one of those except `inline` rebuilt as a fixed custom size (iOS `flags` 1,
-Android all three booleans false). Full write-up:
-`.superpowers/sdd/2026-08-27-banner-ad-api/adaptive-flag-report.md`.
+Android all three booleans false). The flag table above is the full record of that run — it was
+produced by instrumenting `makeAdSize` / `makeAdaptiveAdSize` on both platforms and reading the
+flags off the reconstructed size, one ad per gallery card.
 
 Why the orientation is part of the marker: `largeAnchoredLandscape` resolves to **338x80** on the
 iPhone 17 (width 338) and **347x82** on the Pixel 9a (width 347), while `largeAnchored` /
@@ -199,5 +200,5 @@ rows had already been captured visually in the earlier run log.
 ## Run log
 
 For each item, record which platform it was run on, the actual result, and (if relevant) the
-matching log line in
-`.superpowers/sdd/2026-08-27-banner-ad-api/task-12-report.md`.
+matching `adb logcat` / Xcode console line that evidences it. Paste the line into this file —
+don't reference a scratch file outside the repository, which nobody cloning it can read.

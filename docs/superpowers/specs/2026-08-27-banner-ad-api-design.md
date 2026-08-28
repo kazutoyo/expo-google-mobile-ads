@@ -299,9 +299,17 @@ type AdaptiveOptions = {
   orientation?: 'current' | 'portrait' | 'landscape';   // 既定 'current'
 };
 
+// inlineAdaptive は orientation を取らない（最大高さ形式は両 OS とも向きに依存しないため）。
+// maxHeight は必須。SDK の「最大高さなし」ヘルパーは iOS が高さ 0 のセンチネル、Android が
+// 画面全高を返すため、`{ width, height }` として意味のある既定値が存在しない。
+type InlineAdaptiveOptions = {
+  width?: number;                                       // 省略時は画面幅
+  maxHeight: number;                                    // 必須（32dp 以上）
+};
+
 BannerAdSize.anchoredAdaptive(options?: AdaptiveOptions): BannerAdSize;
 BannerAdSize.largeAnchoredAdaptive(options?: AdaptiveOptions): BannerAdSize;
-BannerAdSize.inlineAdaptive(options: AdaptiveOptions & { maxHeight?: number }): BannerAdSize;
+BannerAdSize.inlineAdaptive(options: InlineAdaptiveOptions): BannerAdSize;
 ```
 
 ### ネイティブ API の対応
@@ -345,7 +353,7 @@ Large は従来版より大幅に高く、レイアウトへの影響が大き�
 type BannerAdSizeSpec =
   | ({ type: 'anchoredAdaptive' } & AdaptiveOptions)
   | ({ type: 'largeAnchoredAdaptive' } & AdaptiveOptions)
-  | ({ type: 'inlineAdaptive'; maxHeight?: number } & AdaptiveOptions);
+  | ({ type: 'inlineAdaptive' } & InlineAdaptiveOptions);
 
 function useBannerAdSize(spec: BannerAdSizeSpec): BannerAdSize;
 ```

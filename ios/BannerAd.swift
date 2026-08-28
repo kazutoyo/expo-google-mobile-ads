@@ -79,6 +79,19 @@ final class InvalidBannerSizeException: Exception, @unchecked Sendable {
   }
 }
 
+/// Thrown when an inline adaptive size carries a non-positive `height` (the max height).
+///
+/// `inlineAdaptiveBanner(width:maxHeight:)` does not trap on a non-positive max height the way
+/// Android's `AdSize.getInlineAdaptiveBannerAdSize` does — it just yields a size that can never
+/// serve, so the banner silently stays blank. Android raises `IllegalArgumentException` from
+/// deep inside its load path instead. Neither is a usable report, so both platforms refuse the
+/// size here, at construction, with the same message.
+final class InvalidInlineMaxHeightException: Exception, @unchecked Sendable {
+  override var reason: String {
+    "An inline adaptive banner requires a positive maxHeight (at least 32dp; 50dp or more is recommended)"
+  }
+}
+
 /// An ad instance that can be held and loaded without being placed in the view hierarchy.
 /// `BannerAdView` addSubviews `bannerView` on mount and only removeFromSuperview on unmount —
 /// it never destroys it, which is what lets it survive across screen transitions.
@@ -208,12 +221,19 @@ final class BannerAd: SharedObject {
     guard let width = size["width"] as? Double, let height = size["height"] as? Double else {
       throw InvalidBannerSizeException()
     }
-    self.adWidth = width
-    self.adHeight = height
     // Only a kind the native side actually understands is kept, so `ad.size` can never report a
     // marker that would be ignored when the size is rebuilt.
-    let kind = size["adaptiveKind"] as? String
-    self.adaptiveKind = BannerAdSizeKind(rawValue: kind ?? "") != nil ? kind : nil
+    let rawKind = size["adaptiveKind"] as? String
+    let kind = BannerAdSizeKind(rawValue: rawKind ?? "")
+    // For an inline size, `height` is the max height. See `InvalidInlineMaxHeightException`.
+    // Checked here, before any stored property is assigned, for the same reason the width/height
+    // guard above is: a throwing class initializer must not leave a half-built instance behind.
+    if kind == .inline, height <= 0 {
+      throw InvalidInlineMaxHeightException()
+    }
+    self.adWidth = width
+    self.adHeight = height
+    self.adaptiveKind = kind != nil ? rawKind : nil
     // Rebuilt rather than echoed back, so `ad.size` reports the same keys on both platforms
     // (Android composes this map from its own fields, which cannot carry extra keys). The key is
     // omitted rather than set to nil for a fixed size, so JS sees `undefined` — matching the
