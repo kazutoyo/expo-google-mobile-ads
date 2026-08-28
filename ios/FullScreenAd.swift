@@ -118,8 +118,10 @@ class FullScreenAd: SharedObject {
   /// because no GMA callback is ever going to fire.
   func markLoadFailed(_ message: String) {
     DispatchQueue.main.async { [self] in
-      // Same check the load-success path makes: a released ad reports nothing.
-      if isReleased {
+      // Same guard `handleLoadFailed` makes, and for the same reason: this is a load failure like
+      // any other, so it must never overwrite `"shown"` or land while a show is in flight. Matches
+      // Android's `FullScreenAd.markLoadFailed`, which already checks the full predicate.
+      if shouldDiscardLoadResult {
         return
       }
       setStatus("error", error: [
