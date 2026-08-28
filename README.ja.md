@@ -22,12 +22,12 @@ Android は [GMA Next-Gen SDK](https://developers.google.com/admob/android/next-
 - **New Architecture 専用**。Old Architecture は対象外
 - **Expo SDK 57 以降** — `peerDependencies` で宣言しているため、バージョン不一致のインストールはネイティブビルドまで待たずに npm/yarn の時点で表面化する
 - **iOS 16.4 以降**、**Android minSdk 24 以降**。iOS の下限は広告 SDK ではなく Expo 側の要求である（`ExpoModulesCore` が SDK 56 以降 `:ios => '16.4'` を宣言している）。Google Mobile Ads SDK v13 自体は iOS 13 で足りる。アプリの `ios.deploymentTarget` が 16.4 未満だとこの pod はインストールできない
-- バナー・インタースティシャル・リワード広告
+- バナー・インタースティシャル・リワード広告（フェーズ1〜2）
 
 未対応:
 
-- UMP（同意管理）
-- ネイティブ広告
+- UMP（同意管理）— フェーズ3
+- ネイティブ広告 — フェーズ4
 - アプリ起動時広告（App Open）
 - リワード広告のサーバーサイド検証
 
@@ -59,7 +59,7 @@ npx expo install expo-google-mobile-ads
 
 plugin はビルド時に App ID の存在と形式を検証する。未設定、または広告**ユニット** ID（`ca-app-pub-xxxx/yyyy` のようにスラッシュ区切り）を App ID の場所に渡した場合は、ビルドをその場で失敗させ、原因が分かるメッセージを出す。App ID は `ca-app-pub-xxxxxxxxxxxxxxxx~xxxxxxxxxx`（チルダ区切り）の形式である。この取り違えは AdMob 初心者が最も踏みやすい落とし穴で、放置すると Google SDK 側で分かりにくいクラッシュ（iOS）や例外（Android）になる。
 
-`delayAppMeasurementInit: true` を渡すと、UMP の同意取得が終わるまで計測の送信を遅らせる設定を両 OS に書き込む（フェーズ2の UMP 対応への布石）。
+`delayAppMeasurementInit: true` を渡すと、UMP の同意取得が終わるまで計測の送信を遅らせる設定を両 OS に書き込む（フェーズ3の UMP 対応への布石）。
 
 ## SDK の初期化
 
