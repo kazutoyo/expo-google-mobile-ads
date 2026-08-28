@@ -248,13 +248,32 @@ Run the items in the order given — several of them depend on the ad reaching `
       the instant the first lands, so the other request completes while the ad is on screen. The
       presenting ad must still dismiss, `show()` must still resolve, the events must still arrive,
       and `status` must stay `shown` with an unchanged `responseId` and no further `statusChange`.
-- [ ] C. **A presentation failure rejects instead of hanging.** Two routes:
+- [ ] C. **A presentation failure rejects instead of hanging, and does not disturb `status`.** Two
+      routes:
       - "show() twice in one tick": both calls pass the JS `status === 'loaded'` gate, so the second
-        reaches native and is rejected as "already presenting" → `failedToShow`. The first must
+        reaches native and is rejected as "already presenting" → `failedToShow`, with `message`
+        "This ad is already being presented." byte-identical on both platforms. The first must
         still resolve on dismissal.
       - "Force an SDK presentation failure on a shown ad": calls the internal `showAsync()` on an
         already-shown ad, bypassing the JS guard, so the SDK itself refuses it
-        (`AdAlreadyUsed` / `AD_REUSED`).
+        (`AdAlreadyUsed` / `AD_REUSED`). **`status` must stay `shown`** — no `status -> error` line
+        and no `statusChange` — because the ad is still single-use and `load()`'s terminal guard
+        must still refuse it.
+- [ ] D. **iOS reports the real native rejection message, byte-identical to Android for the same
+      failure.** Before this was fixed, every native rejection from `showAsync()` arrived in JS as
+      `… undefined reason (at ExpoModulesCore/Promise.swift:65)` — `ShowAdError.code` was right, but
+      `message` was useless (`notLoaded` / `alreadyShown` are unaffected; they are built in JS). A
+      custom `Exception` subclass on iOS (`AdException` in `ios/FullScreenAd.swift`) now carries the
+      SDK's own text. Check it with the double-`show()` button: both platforms must log the same
+      `message`, "This ad is already being presented."
+- [ ] E. **A forced `showAsync()` on an already-shown ad does not walk `status` from `shown` to
+      `error`.** Before this was fixed, `handleFailToPresent` / `handleFailedToShow` recorded the
+      presentation failure unconditionally, so calling the `@internal` `showAsync()` on an
+      already-shown ad (not reachable through the public `show()`, which rejects `alreadyShown`
+      first) parked the ad on `error` — and `load()`'s terminal guard only tests `status == "shown"`,
+      so that ad could then be reloaded and shown a second time. Both callbacks now discard the
+      whole record when `status` is already `shown` (the same check as guard case C's second route
+      above).
 
 ### Run log (2026-08-28, full-screen ads)
 
@@ -277,17 +296,8 @@ Full write-up: `.superpowers/sdd/2026-08-28-fullscreen-ads/task-8-report.md`.
 | B | PASS | PASS |
 | C | PASS both routes | PASS both routes |
 
-Two findings, neither fixed here:
-
-- **iOS loses the rejection message.** `Promise.reject(code, description)` in ExpoModulesCore
-  builds an `Exception` whose `reason` stays `"undefined reason"`, so every native rejection from
-  `showAsync()` arrives in JS as `… undefined reason (at ExpoModulesCore/Promise.swift:65)`.
-  `ShowAdError.code` is still right; only `message` is useless, and only for `failedToShow`
-  (`notLoaded` / `alreadyShown` are built in JS). Android reports the real text.
-- **A forced `showAsync()` on a shown ad walks `shown` → `error`.** `handleFailToPresent` records
-  the presentation failure unconditionally. Not reachable through the public `show()`, which
-  rejects `alreadyShown` first; recorded because it makes the terminal status non-terminal for
-  anyone calling the `@internal` method.
+This run surfaced two findings, both fixed in `71630e3` and re-verified since — see checklist items
+D and E above.
 
 ## Run log
 

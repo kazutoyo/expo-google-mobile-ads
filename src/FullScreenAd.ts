@@ -16,12 +16,19 @@ export type FullScreenAdLike = {
   markLoadFailed(message: string): void;
 };
 
-/** Thrown by `show()`. `code` says which of the three failures happened. */
+/**
+ * Thrown by `show()`. `code` says which of the three failures happened.
+ *
+ * For `failedToShow`, `cause` is the original error the native side rejected with — `code` and
+ * `message` are the documented surface consumers branch on, but `cause` keeps programmatic access
+ * to the SDK's own error (e.g. to tell iOS's `AdAlreadyUsed` apart from a genuine presentation
+ * failure) for anyone who needs it.
+ */
 export class ShowAdError extends Error {
   readonly code: ShowAdErrorCode;
 
-  constructor(code: ShowAdErrorCode, message: string) {
-    super(message);
+  constructor(code: ShowAdErrorCode, message: string, options?: ErrorOptions) {
+    super(message, options);
     this.name = 'ShowAdError';
     this.code = code;
   }

@@ -53,7 +53,7 @@ export function attachShow(ad: NativeInterstitialAd): InterstitialAd {
       await ad.showAsync();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      throw new ShowAdError('failedToShow', message);
+      throw new ShowAdError('failedToShow', message, { cause: error });
     }
   };
   return withShow;

@@ -49,4 +49,12 @@ describe('RewardedAd.show', () => {
     (ad as any).showAsync = jest.fn().mockRejectedValue(new Error('presentation failed'));
     await expect(ad.show()).rejects.toMatchObject({ code: 'failedToShow' });
   });
+
+  it('attaches the original native error as cause', async () => {
+    const ad = createRewardedAd({ adUnitId: 'unit' });
+    (ad as any).status = 'loaded';
+    const nativeError = new Error('presentation failed');
+    (ad as any).showAsync = jest.fn().mockRejectedValue(nativeError);
+    await expect(ad.show()).rejects.toMatchObject({ cause: nativeError });
+  });
 });
