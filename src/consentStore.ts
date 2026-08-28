@@ -7,12 +7,12 @@ import type { ConsentInfo } from './types';
  * to render: an app reading `privacyOptionsRequirement` before `gatherConsent()` has run should
  * not show a privacy options button, and one reading `canRequestAds` should not load ads.
  */
-export const UNKNOWN_CONSENT_INFO: ConsentInfo = {
+export const UNKNOWN_CONSENT_INFO: ConsentInfo = Object.freeze({
   status: 'unknown',
   canRequestAds: false,
   isConsentFormAvailable: false,
   privacyOptionsRequirement: 'unknown',
-};
+} as const);
 
 let snapshot: ConsentInfo = UNKNOWN_CONSENT_INFO;
 let listeners: (() => void)[] = [];
@@ -47,7 +47,12 @@ export function subscribeToConsentInfo(listener: () => void): () => void {
  * next subscriber.
  */
 export function setConsentInfo(info: ConsentInfo): void {
-  snapshot = info;
+  // Copied and frozen rather than stored as-is. The same object is handed back to whoever called
+  // the consent function, so storing it directly would let that caller mutate what every
+  // `useConsentInfo()` subscriber sees — with no consent operation behind the change and no
+  // notification that it happened. Freezing makes the aliasing bug impossible rather than
+  // merely discouraged; `ConsentInfo` is `Readonly` so TypeScript catches it at compile time too.
+  snapshot = Object.freeze({ ...info });
   [...listeners].forEach((listener) => listener());
 }
 

@@ -159,3 +159,63 @@ describe('resetConsent', () => {
     expect(getConsentInfoSnapshot()).toEqual(obtained);
   });
 });
+
+describe('overlapping calls', () => {
+  const withdrawn: ConsentInfo = {
+    status: 'required',
+    canRequestAds: false,
+    isConsentFormAvailable: true,
+    privacyOptionsRequirement: 'required',
+  };
+
+  // The scenario this exists to prevent: gatherConsent() is still in flight from app startup on a
+  // slow connection when the user opens the privacy options form and withdraws consent. The
+  // startup call then resolves last, carrying the pre-withdrawal snapshot. If it were allowed to
+  // publish, canRequestAds would flip back to true for someone who just said no.
+  it('does not let a superseded call republish its result over a newer one', async () => {
+    let resolveStartup!: (info: ConsentInfo) => void;
+    mockNative.gatherConsentAsync.mockReturnValue(
+      new Promise<ConsentInfo>((resolve) => {
+        resolveStartup = resolve;
+      })
+    );
+    const startup = gatherConsent();
+
+    mockNative.showPrivacyOptionsFormAsync.mockResolvedValue(withdrawn);
+    await showPrivacyOptionsForm();
+    expect(getConsentInfoSnapshot()).toEqual(withdrawn);
+
+    resolveStartup(obtained);
+    await startup;
+
+    expect(getConsentInfoSnapshot()).toEqual(withdrawn);
+  });
+
+  // Only the shared store is held to the newest call. Each caller still gets what it asked for.
+  it('still resolves the superseded call with its own result', async () => {
+    let resolveStartup!: (info: ConsentInfo) => void;
+    mockNative.gatherConsentAsync.mockReturnValue(
+      new Promise<ConsentInfo>((resolve) => {
+        resolveStartup = resolve;
+      })
+    );
+    const startup = gatherConsent();
+
+    mockNative.showPrivacyOptionsFormAsync.mockResolvedValue(withdrawn);
+    await showPrivacyOptionsForm();
+
+    resolveStartup(obtained);
+
+    await expect(startup).resolves.toEqual(obtained);
+  });
+
+  it('publishes the newest call even when it resolves first', async () => {
+    mockNative.gatherConsentAsync.mockResolvedValue(obtained);
+    await gatherConsent();
+
+    mockNative.showPrivacyOptionsFormAsync.mockResolvedValue(withdrawn);
+    await showPrivacyOptionsForm();
+
+    expect(getConsentInfoSnapshot()).toEqual(withdrawn);
+  });
+});

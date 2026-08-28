@@ -106,8 +106,15 @@ export type PrivacyOptionsRequirementStatus = 'unknown' | 'required' | 'notRequi
  */
 export type DebugGeography = 'disabled' | 'eea' | 'regulatedUsState' | 'other';
 
-/** A snapshot of what UMP currently knows. Every consent function resolves with one. */
-export type ConsentInfo = {
+/**
+ * A snapshot of what UMP currently knows. Every consent function resolves with one.
+ *
+ * Read-only, and frozen at runtime by the store: the published snapshot is shared with every
+ * `useConsentInfo()` subscriber, so a consumer mutating the object it was handed would change
+ * what everyone else sees without any consent operation having happened and without notifying
+ * anyone.
+ */
+export type ConsentInfo = Readonly<{
   status: ConsentStatus;
   /**
    * Whether ads may be requested right now. This — not `status` — is what gates
@@ -124,7 +131,7 @@ export type ConsentInfo = {
    */
   isConsentFormAvailable: boolean;
   privacyOptionsRequirement: PrivacyOptionsRequirementStatus;
-};
+}>;
 
 export type ConsentRequestOptions = {
   /**

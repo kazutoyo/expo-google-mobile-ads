@@ -34,7 +34,10 @@ describe('consentStore', () => {
     setConsentInfo(obtained);
 
     expect(listener).toHaveBeenCalledTimes(1);
-    expect(getConsentInfoSnapshot()).toBe(obtained);
+    // Equality, not identity: the store deliberately copies rather than aliasing the caller's
+    // object. Referential stability — what useSyncExternalStore actually requires — is that the
+    // snapshot does not change between writes, and is covered by its own test above.
+    expect(getConsentInfoSnapshot()).toEqual(obtained);
   });
 
   it('notifies every subscriber', () => {
@@ -70,5 +73,36 @@ describe('consentStore', () => {
     setConsentInfo(obtained);
 
     expect(second).toHaveBeenCalledTimes(1);
+  });
+
+  // The published snapshot is shared with every useConsentInfo() subscriber. If the store kept
+  // the caller's own object, whoever called the consent function could change what everyone
+  // else sees, with no consent operation behind it and no notification that it happened.
+  it('does not alias the object it was given', () => {
+    const mutable = { ...obtained };
+
+    setConsentInfo(mutable);
+    (mutable as { canRequestAds: boolean }).canRequestAds = false;
+
+    expect(getConsentInfoSnapshot()).not.toBe(mutable);
+    expect(getConsentInfoSnapshot().canRequestAds).toBe(true);
+  });
+
+  it('freezes the published snapshot', () => {
+    setConsentInfo({ ...obtained });
+    const snapshot = getConsentInfoSnapshot();
+
+    expect(Object.isFrozen(snapshot)).toBe(true);
+
+    try {
+      (snapshot as { canRequestAds: boolean }).canRequestAds = false;
+    } catch {
+      // Strict mode throws; sloppy mode silently ignores. Either way the value must not change.
+    }
+    expect(getConsentInfoSnapshot().canRequestAds).toBe(true);
+  });
+
+  it('freezes the initial unknown snapshot too', () => {
+    expect(Object.isFrozen(UNKNOWN_CONSENT_INFO)).toBe(true);
   });
 });

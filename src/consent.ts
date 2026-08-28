@@ -47,14 +47,33 @@ function toConsentError(error: unknown): ConsentError {
  * The store is only written on success: a failed call knows nothing new, and overwriting a good
  * snapshot with a guess would make `useConsentInfo()` report a state the SDK never reported.
  */
+/**
+ * Issue order for consent calls, so a superseded one cannot republish its result.
+ *
+ * Monotonic and never reset: only the relative order matters.
+ */
+let latestCallId = 0;
+
 async function run(call: () => Promise<ConsentInfo>): Promise<ConsentInfo> {
+  const callId = ++latestCallId;
   let info: ConsentInfo;
   try {
     info = await call();
   } catch (error) {
     throw toConsentError(error);
   }
-  setConsentInfo(info);
+  // Last request wins, and it is the order calls were *issued* in that decides — not the order
+  // the SDK happens to settle them in. Without this, a slow `gatherConsent()` from app startup
+  // can land after the user has withdrawn consent in the privacy options form and republish the
+  // older, more permissive snapshot, so `canRequestAds` flips back to true for someone who just
+  // said no. Phase 2 draws the same line for overlapping ad loads (`isStaleLoadResult` in
+  // `ios/FullScreenAd.swift`).
+  //
+  // Only the store is held to this. The caller still gets its own result back, because it asked
+  // for it — what must not happen is one shared snapshot going backwards for every subscriber.
+  if (callId === latestCallId) {
+    setConsentInfo(info);
+  }
   return info;
 }
 
