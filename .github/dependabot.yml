@@ -10,6 +10,27 @@ updates:
     groups:
       dev-dependencies:
         dependency-type: development
+    ignore:
+      # These do not move on their own — the Expo SDK decides them. `expo` and
+      # `react-native` pin the Babel and Jest majors their presets work with, so
+      # a bump here breaks the test harness rather than updating it: Babel 8
+      # fails @react-native/jest-preset's `assertVersion("^7.0.0-0")`, and Jest
+      # 30 fails in jest-expo's runtime with `clearMocksOnScope is not a
+      # function`. `npx expo install --check` raises them, at SDK upgrade time.
+      - dependency-name: expo
+      - dependency-name: expo-modules-core
+      - dependency-name: react-native
+      - dependency-name: react
+      - dependency-name: jest-expo
+      - dependency-name: babel-preset-expo
+      - dependency-name: '@babel/core'
+        update-types: ['version-update:semver-major']
+      - dependency-name: jest
+        update-types: ['version-update:semver-major']
+      - dependency-name: '@types/jest'
+        update-types: ['version-update:semver-major']
+      - dependency-name: '@types/react'
+        update-types: ['version-update:semver-major']
 
   - package-ecosystem: npm
     directory: /example
@@ -18,6 +39,11 @@ updates:
     groups:
       example:
         patterns: ['*']
+    ignore:
+      # Same as above: the example app tracks the SDK, not the registry.
+      - dependency-name: expo
+      - dependency-name: react-native
+      - dependency-name: react
 
   - package-ecosystem: npm
     directory: /website
