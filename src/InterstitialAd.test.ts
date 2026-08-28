@@ -23,6 +23,15 @@ beforeEach(() => {
     this.load = jest.fn();
     this.showAsync = jest.fn().mockResolvedValue(undefined);
     this.markLoadFailed = jest.fn();
+    // Models what Expo actually does on `release()`: the registry entry is gone, so every
+    // property getter on the JS object throws `SharedObject.NotFoundException` from then on.
+    this.release = jest.fn(() => {
+      Object.defineProperty(this, 'status', {
+        get() {
+          throw new Error('SharedObject.NotFoundException');
+        },
+      });
+    });
   });
 });
 
@@ -65,6 +74,16 @@ describe('InterstitialAd.show', () => {
     (ad as any).status = 'loaded';
     await expect(ad.show()).resolves.toBeUndefined();
     expect((ad as any).showAsync).toHaveBeenCalledTimes(1);
+  });
+
+  // Regression: `assertShowable` read `ad.status` before checking for a released ad, so this
+  // rejected with the raw `SharedObject.NotFoundException` instead of a `ShowAdError`.
+  it('rejects a released ad with notLoaded, not the raw shared-object exception', async () => {
+    const ad = createInterstitialAd({ adUnitId: 'unit' });
+    (ad as any).status = 'loaded';
+    (ad as any).release();
+    await expect(ad.show()).rejects.toMatchObject({ name: 'ShowAdError', code: 'notLoaded' });
+    expect((ad as any).showAsync).not.toHaveBeenCalled();
   });
 
   it('surfaces a native presentation failure as failedToShow', async () => {

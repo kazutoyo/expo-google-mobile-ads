@@ -88,6 +88,18 @@ abstract class FullScreenAd(
     private set
 
   /**
+   * Identifies the request [load] most recently started. Bumped on every accepted `load()`, and
+   * carried by the SDK callbacks of that request so a result can say which request it belongs to.
+   * See [isStaleLoadResult].
+   *
+   * Only ever touched on the main thread ([load] and every load callback are posted there), but
+   * `@Volatile` anyway: a `Long` write is not guaranteed atomic on a 32-bit VM, so a torn read is
+   * theoretically possible without it, and this costs nothing.
+   */
+  @Volatile
+  private var currentLoadId = 0L
+
+  /**
    * Posts to the main thread. Everything that touches the GMA ad object goes through here.
    *
    * [Android counterpart of Lesson 1 — thread affinity] `show(Activity)` and the SDK's own
@@ -131,7 +143,10 @@ abstract class FullScreenAd(
       // because the two guards above have ruled out a presentation.
       tearDownAd()
       setState("loading", null)
-      loadAd(AdRequest.Builder(adUnitId).applyRequestOptions(requestOptions).build())
+      // From here on this is *the* request; anything still outstanding from a previous `load()` is
+      // stale and its result will be discarded by [isStaleLoadResult].
+      currentLoadId += 1
+      loadAd(AdRequest.Builder(adUnitId).applyRequestOptions(requestOptions).build(), currentLoadId)
     }
   }
 
@@ -188,8 +203,42 @@ abstract class FullScreenAd(
       return discard
     }
 
-  /** Subclass hook. Starts the SDK-side load; called on the main thread. */
-  protected abstract fun loadAd(request: AdRequest)
+  /**
+   * Whether a load result belongs to a request that has since been superseded.
+   *
+   * [load] permits overlapping SDK requests — it only refuses while a show is in flight — and the
+   * SDK settles them in whatever order the network delivers, which is not the order they were
+   * issued. Without an identity on each result, request A's late outcome overwrites request B's:
+   * an `"error"` written over B's `"loaded"` makes `show()` reject a perfectly usable ad as
+   * `notLoaded`, and a stale *success* replaces the newer ad with the older one.
+   *
+   * [shouldDiscardLoadResult] does not catch this — nothing has been released, no show is in
+   * flight and the status is not `"shown"` — so the two are complementary and both are checked at
+   * every load-result site. [shouldDiscardLoadResult] answers "is this object still able to accept
+   * *any* result?"; this answers "is this result still the one we asked for?".
+   *
+   * The rule is last-request-wins: only the outcome of the most recent [load] is recorded. A stale
+   * success is dropped even though its ad is perfectly good, because the newer request is the one
+   * whose result the caller is waiting on, and installing the older ad would silently walk
+   * `responseInfo` (and the rewarded `reward` snapshot) backwards.
+   */
+  protected fun isStaleLoadResult(loadId: Long): Boolean {
+    val stale = loadId != currentLoadId
+    if (stale) {
+      // Debug-level only, like the log in [shouldDiscardLoadResult]: the interleaving that reaches
+      // this branch is timing-dependent, so a QA run needs to be able to see it fire.
+      Log.d(TAG, "Discarding a stale load result: loadId=$loadId currentLoadId=$currentLoadId")
+    }
+    return stale
+  }
+
+  /**
+   * Subclass hook. Starts the SDK-side load; called on the main thread.
+   *
+   * [loadId] identifies this request and must be carried into the SDK's load callbacks, which are
+   * the only place it can be recovered from — see [isStaleLoadResult].
+   */
+  protected abstract fun loadAd(request: AdRequest, loadId: Long)
 
   /**
    * Subclass hook. Presents the loaded ad, returning `false` if there is no ad object to present —
@@ -220,8 +269,8 @@ abstract class FullScreenAd(
   protected open fun showResult(): Map<String, Any?>? = null
 
   /**
-   * Called by a subclass from its load callback, on the main thread, once
-   * [shouldDiscardLoadResult] has cleared the result for installation.
+   * Called by a subclass from its load callback, on the main thread, once [isStaleLoadResult] and
+   * [shouldDiscardLoadResult] have both cleared the result for installation.
    */
   protected fun handleLoaded(info: ResponseInfo?) {
     synchronized(stateLock) {
@@ -231,12 +280,16 @@ abstract class FullScreenAd(
   }
 
   /** Called by a subclass from its load callback, on the main thread. */
-  protected fun handleLoadFailed(adError: LoadAdError) {
+  protected fun handleLoadFailed(adError: LoadAdError, loadId: Long) {
     // A load failure is subject to the same discard rule as a success. With two requests
     // outstanding, a late failure from the first would overwrite `"shown"` with `"error"` and emit
     // a statusChange reporting a successful impression as a failure. Worse, [load]'s terminal
     // guard tests only `"shown"`, so an ad parked on `"error"` could be loaded and shown again.
-    if (shouldDiscardLoadResult) {
+    //
+    // The staleness check is the other half, and neither implies the other: this is the path where
+    // a failure from a superseded request would overwrite a newer request's `"loaded"` with
+    // `"error"`, leaving `show()` to reject a usable ad as `notLoaded`.
+    if (isStaleLoadResult(loadId) || shouldDiscardLoadResult) {
       return
     }
     setState("error", adError.toMap())

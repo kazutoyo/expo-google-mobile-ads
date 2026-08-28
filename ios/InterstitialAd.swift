@@ -13,32 +13,38 @@ final class FullScreenInterstitialAd: FullScreenAd {
   /// `presentAd(from:)` and `tearDownAd()`, all of which run on main).
   private var ad: InterstitialAd?
 
-  override func loadAd(request: Request) {
+  override func loadAd(request: Request, loadId: Int) {
+    // `loadId` is captured by this closure because it is the only thing that knows which request
+    // the result belongs to — GMA hands back no request identity of its own.
     InterstitialAd.load(with: adUnitId, request: request) { [weak self] ad, error in
       // GMA does not document which thread this completion handler runs on — unlike the
       // presentation-side members, it carries no NS_SWIFT_UI_ACTOR — so the result is hopped onto
-      // main rather than assuming. Everything it touches (`ad`, `isReleased`) is main-thread-only.
+      // main rather than assuming. Everything it touches (`ad`, `isReleased`, `currentLoadId`) is
+      // main-thread-only.
       DispatchQueue.main.async {
-        self?.handleLoadCompletion(ad: ad, error: error)
+        self?.handleLoadCompletion(ad: ad, error: error, loadId: loadId)
       }
     }
   }
 
-  private func handleLoadCompletion(ad: InterstitialAd?, error: Error?) {
+  private func handleLoadCompletion(ad: InterstitialAd?, error: Error?, loadId: Int) {
     if let error {
-      handleLoadFailed(error)
+      handleLoadFailed(error, loadId: loadId)
       return
     }
     guard let ad else {
       // Not reachable per the header contract (exactly one of ad/error is non-nil), but a silent
       // no-op here would leave the ad stuck on "loading" with no error anywhere.
-      handleLoadFailed(missingAdError())
+      handleLoadFailed(missingAdError(), loadId: loadId)
       return
     }
-    if shouldDiscardLoadResult {
-      // Released, a show is in flight, or this ad has already been shown. Installing would mean
-      // tearing down whatever is here — including, in the in-flight case, the delegate the show
-      // promise is waiting on. Drop this ad instead.
+    if isStaleLoadResult(loadId) || shouldDiscardLoadResult {
+      // Either this result belongs to a superseded request (a later `load()` has been issued, and
+      // installing an older ad now would walk `responseInfo` backwards and overwrite the newer
+      // request's outcome), or the object can no longer accept any result: released, a show is in
+      // flight, or this ad has already been shown. Installing would mean tearing down whatever is
+      // here — including, in the in-flight case, the delegate the show promise is waiting on. Drop
+      // this ad instead.
       //
       // Dropping it is complete cleanup and leaks nothing: nothing below has run yet, so its
       // `fullScreenContentDelegate` and `paidEventHandler` are both still nil and it holds no
@@ -46,10 +52,11 @@ final class FullScreenInterstitialAd: FullScreenAd {
       // ads have no `destroy()`; that is an Android-only member.)
       return
     }
-    // Two loads can overlap (the second `load()` clears `ad`, but the first request may still land
-    // afterwards), so an earlier ad can be sitting here. Clear its delegate and paid closure
-    // before replacing it, or it keeps firing events into this object. Safe here only because the
-    // guard above has ruled out a presentation in flight.
+    // Nothing should be here: `load()` tears the previous ad down before it bumps the load id, and
+    // only the current id reaches this line. Kept as an unconditional "never install over an
+    // existing ad" — an ad left behind would keep firing events into this object through its
+    // delegate and paid closure. Safe here only because the guard above has ruled out a
+    // presentation in flight.
     tearDownAd()
     // `fullScreenContentDelegate` is a weak property; the proxy is retained by `FullScreenAd`.
     ad.fullScreenContentDelegate = delegateProxy

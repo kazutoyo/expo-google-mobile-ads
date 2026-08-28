@@ -71,6 +71,14 @@ class FullScreenAd: SharedObject {
   /// `BannerAd.isReleased`.
   private(set) var isReleased = false
 
+  /// Identifies the request `load()` most recently started. Bumped on every accepted `load()`, and
+  /// carried by that request's completion handler so a result can say which request it belongs to.
+  /// See `isStaleLoadResult(_:)`.
+  ///
+  /// Main thread only, like `showPromise`: `load()` dispatches onto main before touching it, and
+  /// every load completion handler hops to main before reading it.
+  private var currentLoadId = 0
+
   init(adUnitId: String, requestOptions: [String: Any?]?) {
     self.adUnitId = adUnitId
     self.requestOptions = requestOptions
@@ -109,7 +117,10 @@ class FullScreenAd: SharedObject {
       // survive into this one.
       tearDownAd()
       setStatus("loading", error: nil)
-      loadAd(request: makeRequest())
+      // From here on this is *the* request; anything still outstanding from a previous `load()` is
+      // stale and its result will be discarded by `isStaleLoadResult(_:)`.
+      currentLoadId += 1
+      loadAd(request: makeRequest(), loadId: currentLoadId)
     }
   }
 
@@ -151,7 +162,41 @@ class FullScreenAd: SharedObject {
   }
 
   /// Subclass hook. Starts the SDK-side load; called on the main thread.
-  func loadAd(request: Request) {}
+  ///
+  /// `loadId` identifies this request and must be carried into the SDK's load completion handler,
+  /// which is the only place it can be recovered from — see `isStaleLoadResult(_:)`.
+  func loadAd(request: Request, loadId: Int) {}
+
+  /// Whether a load result belongs to a request that has since been superseded.
+  ///
+  /// `load()` permits overlapping SDK requests — it only refuses while a show is in flight — and
+  /// the SDK settles them in whatever order the network delivers, which is not the order they were
+  /// issued. Without an identity on each result, request A's late outcome overwrites request B's:
+  /// an `"error"` written over B's `"loaded"` makes `show()` reject a perfectly usable ad as
+  /// `notLoaded`, and a stale *success* replaces the newer ad with the older one.
+  ///
+  /// `shouldDiscardLoadResult` does not catch this — nothing has been released, no show is in
+  /// flight and the status is not `"shown"` — so the two are complementary and both are checked at
+  /// every load-result site. `shouldDiscardLoadResult` answers "is this object still able to accept
+  /// *any* result?"; this answers "is this result still the one we asked for?".
+  ///
+  /// The rule is last-request-wins: only the outcome of the most recent `load()` is recorded. A
+  /// stale success is dropped even though its ad is perfectly good, because the newer request is
+  /// the one whose result the caller is waiting on, and installing the older ad would silently walk
+  /// `responseInfo` (and the rewarded `reward` snapshot) backwards.
+  ///
+  /// Ported to Android as `FullScreenAd.isStaleLoadResult`, applied at the same sites.
+  func isStaleLoadResult(_ loadId: Int) -> Bool {
+    let stale = loadId != currentLoadId
+    if stale {
+      // Debug-level only, like the log in `shouldDiscardLoadResult`: the interleaving that reaches
+      // this branch is timing-dependent, so a QA run needs to be able to see it fire.
+      discardLogger.debug(
+        "Discarding a stale load result: loadId=\(loadId), currentLoadId=\(self.currentLoadId)"
+      )
+    }
+    return stale
+  }
 
   /// Subclass hook. Presents the loaded ad, returning `false` if there is no ad object to present
   /// — in which case `showAsync()` rejects rather than leaving its promise pending forever.
@@ -216,7 +261,7 @@ class FullScreenAd: SharedObject {
   }
 
   /// Called by a subclass from its load completion handler, on the main thread.
-  func handleLoadFailed(_ error: Error) {
+  func handleLoadFailed(_ error: Error, loadId: Int) {
     // The same guard the success path uses, and it subsumes the `isReleased` check that used to be
     // here. A load failure must never be recorded while an ad is presenting or after it has shown:
     // with two loads outstanding, a late failure from request #1 would overwrite `"shown"` with
@@ -225,7 +270,11 @@ class FullScreenAd: SharedObject {
     // loaded and shown a second time — this is the last path that could reopen the terminal-status
     // invariant that rounds 1 and 2 exist to protect. There is no legitimate case where a failure
     // should land in either state, so discarding it is strictly correct.
-    if shouldDiscardLoadResult {
+    //
+    // The staleness check is the other half, and neither implies the other: this is the path where
+    // a failure from a superseded request would overwrite a newer request's `"loaded"` with
+    // `"error"`, leaving `show()` to reject a usable ad as `notLoaded`.
+    if isStaleLoadResult(loadId) || shouldDiscardLoadResult {
       return
     }
     setStatus("error", error: errorToDictionary(error))

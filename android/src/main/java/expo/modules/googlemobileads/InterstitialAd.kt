@@ -32,7 +32,7 @@ class InterstitialAd(
   @Volatile
   private var ad: GmaInterstitialAd? = null
 
-  override fun loadAd(request: AdRequest) {
+  override fun loadAd(request: AdRequest, loadId: Long) {
     // Static load on the companion; there is no `InterstitialAdRequest` — this takes the common
     // `AdRequest`, unlike the banner's `BannerAdRequest`.
     GmaInterstitialAd.load(
@@ -40,25 +40,30 @@ class InterstitialAd(
       object : AdLoadCallback<GmaInterstitialAd> {
         // Both methods are `default` in the AAR, so a missing override would compile into a
         // silent no-op. Both are implemented deliberately.
+        //
+        // `loadId` is captured here because this callback object is the only thing that knows
+        // which request the result belongs to — the SDK hands back no request identity of its own.
         override fun onAdLoaded(ad: GmaInterstitialAd) {
           // The SDK does not document which thread this arrives on; hopped to main so it is
           // ordered against `load()`, `showAsync()` and the teardown post, all of which run there.
-          postToMain { onAdReady(ad) }
+          postToMain { onAdReady(ad, loadId) }
         }
 
         override fun onAdFailedToLoad(adError: LoadAdError) {
-          postToMain { handleLoadFailed(adError) }
+          postToMain { handleLoadFailed(adError, loadId) }
         }
       }
     )
   }
 
   /** Main thread. */
-  private fun onAdReady(loaded: GmaInterstitialAd) {
-    if (shouldDiscardLoadResult) {
-      // Released, a show is in flight, or this ad has already been shown. Installing would mean
-      // tearing down whatever is here — including, in the in-flight case, the callback the show
-      // promise is waiting on.
+  private fun onAdReady(loaded: GmaInterstitialAd, loadId: Long) {
+    if (isStaleLoadResult(loadId) || shouldDiscardLoadResult) {
+      // Either this result belongs to a superseded request (a later `load()` has been issued, and
+      // installing an older ad now would walk `responseInfo` backwards and overwrite the newer
+      // request's outcome), or the object can no longer accept any result: released, a show is in
+      // flight, or this ad has already been shown. Installing would mean tearing down whatever is
+      // here — including, in the in-flight case, the callback the show promise is waiting on.
       //
       // **Destroy the ad that just arrived, not the one that is here.** Tearing down the
       // presenting ad is exactly the hang iOS spent a round fixing. Unlike iOS, where ARC frees a
@@ -68,10 +73,11 @@ class InterstitialAd(
       loaded.destroy()
       return
     }
-    // Two loads can overlap: `load()` refuses to start a second request while a show is in flight,
-    // but a request issued earlier can still land now. Clear and destroy whatever is here before
-    // replacing it, or it keeps firing events into this shared object. Safe only because the guard
-    // above has ruled out a presentation.
+    // Nothing should be here: `load()` tears the previous ad down before it bumps the load id, and
+    // only the current id reaches this line. Kept as an unconditional "never install over an
+    // existing ad" — an ad left behind would keep firing events into this shared object and, on
+    // Android, leak until `destroy()`. Safe only because the guard above has ruled out a
+    // presentation.
     tearDownAd()
     loaded.adEventCallback = object : InterstitialAdEventCallback {
       override fun onAdShowedFullScreenContent() = handleShowed()
