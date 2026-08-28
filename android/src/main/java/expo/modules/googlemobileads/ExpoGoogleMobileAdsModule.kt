@@ -1,5 +1,7 @@
 package expo.modules.googlemobileads
 
+import android.app.Activity
+import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import com.google.android.libraries.ads.mobile.sdk.MobileAds
@@ -7,6 +9,8 @@ import com.google.android.libraries.ads.mobile.sdk.banner.AdSize
 import com.google.android.libraries.ads.mobile.sdk.common.RequestConfiguration
 import com.google.android.libraries.ads.mobile.sdk.initialization.AdapterStatus
 import com.google.android.libraries.ads.mobile.sdk.initialization.InitializationConfig
+import com.google.android.ump.FormError
+import com.google.android.ump.UserMessagingPlatform
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.exception.Exceptions
 import expo.modules.kotlin.functions.Coroutine
@@ -109,6 +113,20 @@ private fun Map<String, Any?>.toRequestConfiguration(): RequestConfiguration {
 }
 
 private fun AdSize.toMap(): Map<String, Any?> = mapOf("width" to width, "height" to height)
+
+/**
+ * Rejects [promise] with the normalized code, or resolves it with a fresh snapshot.
+ *
+ * Every UMP callback on Android hands back a nullable [FormError], so this is the single place
+ * that turns one into a JS rejection — the six functions below never build a rejection themselves.
+ */
+private fun settleConsent(promise: Promise, context: Context, error: FormError?) {
+  if (error != null) {
+    promise.reject(consentErrorCode(error.errorCode), consentErrorMessage(error), null)
+    return
+  }
+  promise.resolve(consentSnapshot(context))
+}
 
 class ExpoGoogleMobileAdsModule : Module() {
   override fun definition() = ModuleDefinition {
@@ -214,6 +232,81 @@ class ExpoGoogleMobileAdsModule : Module() {
       AdSize.getInlineAdaptiveBannerAdSize(width.roundToInt(), maxHeight.roundToInt()).toMap()
     }
 
+    // MARK: - UMP consent
+    //
+    // Every one of these resolves an Activity at call time and never caches it: at preload there
+    // may be none at all. When there is none the call rejects with `noActivity` rather than
+    // failing silently — the same trap phase 1 hit with `BannerAd.load()`.
+    //
+    // All of them run on `Dispatchers.Main`: UMP's consent calls are main-thread-only on Android
+    // as well, and `Coroutine` would otherwise run them on a background dispatcher.
+
+    AsyncFunction("gatherConsentAsync") { options: Map<String, Any?>?, promise: Promise ->
+      withMainConsentActivity(promise) { activity ->
+        val info = consentInformation(activity)
+        info.requestConsentInfoUpdate(
+          activity,
+          makeConsentRequestParameters(activity, options),
+          {
+            // Composed here rather than in JS so nothing can interleave between the update and
+            // the form, and so the Activity is resolved once instead of twice.
+            UserMessagingPlatform.loadAndShowConsentFormIfRequired(activity) { formError ->
+              settleConsent(promise, activity, formError)
+            }
+          },
+          { requestError -> settleConsent(promise, activity, requestError) }
+        )
+      }
+    }
+
+    AsyncFunction("requestConsentInfoUpdateAsync") { options: Map<String, Any?>?, promise: Promise ->
+      withMainConsentActivity(promise) { activity ->
+        consentInformation(activity).requestConsentInfoUpdate(
+          activity,
+          makeConsentRequestParameters(activity, options),
+          { settleConsent(promise, activity, null) },
+          { requestError -> settleConsent(promise, activity, requestError) }
+        )
+      }
+    }
+
+    AsyncFunction("showConsentFormIfRequiredAsync") { promise: Promise ->
+      withMainConsentActivity(promise) { activity ->
+        UserMessagingPlatform.loadAndShowConsentFormIfRequired(activity) { formError ->
+          settleConsent(promise, activity, formError)
+        }
+      }
+    }
+
+    AsyncFunction("showPrivacyOptionsFormAsync") { promise: Promise ->
+      withMainConsentActivity(promise) { activity ->
+        UserMessagingPlatform.showPrivacyOptionsForm(activity) { formError ->
+          settleConsent(promise, activity, formError)
+        }
+      }
+    }
+
+    // Reading consent state needs only a Context, not an Activity, so this one never produces
+    // `noActivity`. It stays async because iOS's equivalent is main-thread-only.
+    AsyncFunction("getConsentInfoAsync") { promise: Promise ->
+      val context = appContext.reactContext
+      if (context == null) {
+        promise.reject("internal", "The React context is gone.", null)
+      } else {
+        promise.resolve(consentSnapshot(context))
+      }
+    }
+
+    AsyncFunction("resetConsentAsync") { promise: Promise ->
+      val context = appContext.reactContext
+      if (context == null) {
+        promise.reject("internal", "The React context is gone.", null)
+      } else {
+        consentInformation(context).reset()
+        promise.resolve(consentSnapshot(context))
+      }
+    }
+
     Class(BannerAd::class) {
       Constructor { adUnitId: String, size: Map<String, Any?>, requestOptions: Map<String, Any?>? ->
         val width = (size["width"] as? Number)?.toInt() ?: throw InvalidBannerSizeException()
@@ -299,6 +392,29 @@ class ExpoGoogleMobileAdsModule : Module() {
       OnViewDestroys { view: BannerAdView ->
         view.onDestroy()
       }
+    }
+  }
+
+  /**
+   * Resolves the current Activity on the main thread and runs [block] with it, rejecting
+   * [promise] with `noActivity` if there is none.
+   *
+   * Resolved on every call, never cached: a consent call can arrive at app startup before any
+   * Activity exists, which is the same condition phase 1 hit when a banner was preloaded.
+   */
+  private fun withMainConsentActivity(promise: Promise, block: (Activity) -> Unit) {
+    mainHandler.post {
+      val activity = appContext.currentActivity
+      if (activity == null) {
+        promise.reject(
+          "noActivity",
+          "No Activity is in the foreground, so the consent SDK cannot be called. " +
+            "Call this once the app has a screen on display.",
+          null
+        )
+        return@post
+      }
+      block(activity)
     }
   }
 }
