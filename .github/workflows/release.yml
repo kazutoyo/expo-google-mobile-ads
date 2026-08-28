@@ -3,6 +3,12 @@ name: Release
 # Publishes to npm when a version tag is pushed. The tag has no `v` prefix,
 # matching the version in package.json verbatim — the podspec reads its version
 # from there, so the three can never disagree.
+#
+# Three jobs, because the point of trusted publishing is that nothing but npm
+# can reach the credential that publishes. `build` runs the dependency code —
+# install scripts, jest, babel — with no way to mint an OIDC token. `publish`
+# holds that token and runs nothing but npm against an already-built tarball.
+# `release` is the only one that can write to the repository.
 on:
   push:
     tags: ['[0-9]*.[0-9]*.[0-9]*']
@@ -11,19 +17,9 @@ permissions:
   contents: read
 
 jobs:
-  publish:
-    name: Publish to npm
+  build:
+    name: Build and verify
     runs-on: ubuntu-latest
-    # Required reviewers on this environment: a pushed tag waits for a human to
-    # approve the run before anything reaches npm.
-    environment: npm-publish
-    permissions:
-      # Deliberately no `contents: write`: this job runs `npm ci`, which
-      # executes dependency lifecycle code, and a token that can rewrite the
-      # repository has no business being reachable from there. The GitHub
-      # release is created by the job below instead.
-      contents: read
-      id-token: write # trusted publishing — no NPM_TOKEN, and npm attaches provenance
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -32,19 +28,11 @@ jobs:
         with:
           node-version: 26
           cache: npm
-          # No `registry-url`: it makes setup-node write an .npmrc with
-          # `_authToken=${NODE_AUTH_TOKEN}`, and with trusted publishing there is
-          # no such token. npm then authenticates with an empty one and the
-          # registry answers 404 — its response for "not authorised" — instead of
-          # falling back to OIDC.
 
-      # Trusted publishing needs npm 11.5.1+; the runner ships npm 11.x. Pinned
-      # rather than `@latest`: this runs in the job that holds the OIDC token.
-      # npm 12 needs Node ^24.15.0, which `node-version: 26` above satisfies.
-      - run: npm install -g npm@12.0.2 && npm --version
-
-      # A version can never be republished, so refuse a tag that disagrees with
-      # package.json rather than burning the number.
+      # Both checks run before `npm ci`, so a bad tag costs nothing. A version
+      # can never be republished: a tag that disagrees with package.json, or a
+      # changelog with no entry for it, has to stop the run while the number is
+      # still free.
       - name: Check the tag matches package.json
         run: |
           pkg=$(node -p "require('./package.json').version")
@@ -53,8 +41,6 @@ jobs:
             exit 1
           fi
 
-      # Also before publishing: a missing changelog entry should stop the
-      # release while the number is still free.
       - name: Check the changelog has an entry
         run: node internal/module_scripts/changelog-notes.js "$GITHUB_REF_NAME" > /dev/null
 
@@ -64,8 +50,56 @@ jobs:
       - run: npm run typecheck
 
       # `prepare` rebuilds `build/` and `plugin/build/` from scratch as part of
-      # publishing.
-      - run: npm publish
+      # packing, so this tarball is exactly what gets published.
+      - run: npm pack
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: package-tarball
+          path: '*.tgz'
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    name: Publish to npm
+    needs: build
+    runs-on: ubuntu-latest
+    # Required reviewers on this environment: an approved build waits for a
+    # human before anything reaches npm.
+    environment: npm-publish
+    permissions:
+      contents: read
+      id-token: write # trusted publishing — no NPM_TOKEN, and npm attaches provenance
+    steps:
+      # No checkout and no install: the only third-party code this job runs is
+      # npm itself. `id-token: write` puts the OIDC request credentials in the
+      # environment, and every child process inherits them.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 26
+          # No `registry-url`: it makes setup-node write an .npmrc with
+          # `_authToken=${NODE_AUTH_TOKEN}`, and with trusted publishing there is
+          # no such token. npm then authenticates with an empty one and the
+          # registry answers 404 — its response for "not authorised" — instead of
+          # falling back to OIDC.
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: package-tarball
+
+      # Trusted publishing needs npm 11.5.1+. Node 26 ships a newer one, so
+      # there is nothing to install — but fail loudly rather than let npm skip
+      # OIDC and report the registry's 404 for "not authorised".
+      - name: Check npm is new enough for trusted publishing
+        run: |
+          version=$(npm --version)
+          echo "npm $version"
+          if [ "$(printf '%s\n11.5.1\n' "$version" | sort -V | head -1)" != "11.5.1" ]; then
+            echo "npm $version cannot use trusted publishing; 11.5.1 or newer is required"
+            exit 1
+          fi
+
+      - run: npm publish "$(ls *.tgz)"
 
   release:
     name: Create the GitHub release
@@ -74,8 +108,8 @@ jobs:
     permissions:
       contents: write
     steps:
-      # Separate job so the write-capable token is never present while
-      # dependency code runs. Nothing is installed here.
+      # Separate again: this is the only write-capable token in the workflow,
+      # and nothing is installed here.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
