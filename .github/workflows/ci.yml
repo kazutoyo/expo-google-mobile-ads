@@ -83,9 +83,12 @@ jobs:
         working-directory: example/ios
         run: |
           xcodebuild -version
+          # The workspace is named after the app slug, so read it rather than
+          # hardcoding it — a slug change would otherwise fail here obscurely.
+          workspace=$(ls -d *.xcworkspace)
           xcodebuild \
-            -workspace example.xcworkspace \
-            -scheme example \
+            -workspace "$workspace" \
+            -scheme "${workspace%.xcworkspace}" \
             -configuration Debug \
             -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator' \
