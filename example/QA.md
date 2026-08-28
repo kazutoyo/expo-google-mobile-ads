@@ -18,11 +18,14 @@ depend on completing one of items 1-8 here first.
       device ID printed in the log to `testDeviceIds` and retry)
 - [ ] 3. Consenting sets `status: obtained` and `canRequestAds: true`; `initialize()` then
       succeeds and ads load
-- [ ] 4. Restarting the app preserves `status`; "Gather consent (EEA debug)" does not show the
-      form again
+- [ ] 4. Restarting the app resets `useConsentInfo()` to `status: unknown` (it does not hydrate
+      from the SDK's persisted consent on mount) — then tapping "Gather consent (EEA debug)"
+      again returns `status: obtained` **with no form shown**, proving the native-side consent
+      survived the restart even though the hook's on-screen value did not
 - [ ] 5. The "Privacy options" button appears only when `privacyOptionsRequirement: required`
-- [ ] 6. "Privacy options" reopens the form, and changing the choice there updates what
-      `useConsentInfo()` displays
+- [ ] 6. "Privacy options" reopens the form, and choosing either option there resolves without
+      error (none of `useConsentInfo()`'s fields are expected to change based on which choice
+      was made — they report whether consent is needed, not what was chosen)
 - [ ] 7. **Makes items 2-6 repeatable**: after "Reset consent (dev only)", item 2's form appears
       again (without this, a device can only be walked through the flow once, since the SDK
       persists consent)
@@ -33,8 +36,12 @@ depend on completing one of items 1-8 here first.
       though the underlying native codes differ (iOS 3, Android 2) — confirming they normalize
       to the same `ConsentErrorCode`. The message ends with `(native code: N)`. Run this on both
       platforms; record the actual `(native code: N)` seen on each
-- [ ] 10. Android only: sending the app to the background before a consent call runs makes it
-      fail with `noActivity:`
+- [ ] 10. **Not reachable from this example app**: `noActivity` only occurs on a consent call
+      issued before any Activity has ever existed (a preload-time condition), not on a call made
+      after backgrounding an app that already has one — React Native's `currentActivity` isn't
+      nulled by `onPause`, so a background-then-tap does not reproduce it here. Do not spend time
+      trying to trigger this from the UI; it would need a consent call from module-scope code
+      (like the ad-preload path) to be reachable at all
 
 ## Basics
 
