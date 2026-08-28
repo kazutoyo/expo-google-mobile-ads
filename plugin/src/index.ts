@@ -26,14 +26,14 @@ export function validateAppId(appId: string | undefined, platform: 'android' | '
 
   if (!appId) {
     throw new Error(
-      `[expo-google-mobile-ads] ${key} is not set. ` +
+      `[@kazutoyo/expo-google-mobile-ads] ${key} is not set. ` +
         `Specify your AdMob App ID in the plugin config in app.json.`
     );
   }
 
   if (!APP_ID_PATTERN.test(appId)) {
     throw new Error(
-      `[expo-google-mobile-ads] ${key} is not in the AdMob App ID format: "${appId}". ` +
+      `[@kazutoyo/expo-google-mobile-ads] ${key} is not in the AdMob App ID format: "${appId}". ` +
         `An App ID looks like "ca-app-pub-0000000000000000~0000000000". ` +
         `Check that you haven't passed an ad unit ID by mistake (that's separated by "/", not "~").`
     );

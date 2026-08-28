@@ -1,0 +1,30 @@
+version: 2
+
+# The release pipeline runs dependency code, so an unnoticed vulnerable
+# dependency is the realistic way this package ships something it should not.
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      dev-dependencies:
+        dependency-type: development
+
+  - package-ecosystem: npm
+    directory: /example
+    schedule:
+      interval: weekly
+    groups:
+      example:
+        patterns: ['*']
+
+  # Keeps the SHA pins in the workflows current — pinning and updating are not
+  # in conflict; the pin is what makes the update reviewable.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ['*']

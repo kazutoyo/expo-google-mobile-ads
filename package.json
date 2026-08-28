@@ -1,9 +1,25 @@
 {
-  "name": "expo-google-mobile-ads",
+  "name": "@kazutoyo/expo-google-mobile-ads",
   "version": "0.1.0",
   "description": "Expo Module wrapping the Google Mobile Ads (AdMob) SDK",
   "main": "build/index.js",
   "types": "build/index.d.ts",
+  "files": [
+    "build",
+    "plugin/build",
+    "src",
+    "ios",
+    "android",
+    "app.plugin.js",
+    "expo-module.config.json",
+    "CHANGELOG.md",
+    "README.md",
+    "README.ja.md",
+    "!ios/build",
+    "!android/build",
+    "!**/*.test.ts",
+    "!**/*.test.tsx"
+  ],
   "scripts": {
     "build": "node internal/module_scripts/build.js",
     "build:plugin": "tsc --project plugin",
@@ -12,20 +28,30 @@
     "test": "jest --forceExit",
     "prepare": "node internal/module_scripts/prepare.js",
     "open:ios": "node internal/module_scripts/open-ios.js",
-    "open:android": "node internal/module_scripts/open-android.js"
+    "open:android": "node internal/module_scripts/open-android.js",
+    "typecheck": "tsc --noEmit && tsc --noEmit --project plugin"
   },
   "keywords": [
     "react-native",
     "expo",
-    "expo-google-mobile-ads",
-    "ExpoGoogleMobileAds"
+    "expo-module",
+    "admob",
+    "google-mobile-ads",
+    "ads",
+    "advertising"
   ],
-  "repository": "https://github.com/kazutoyo/expo-google-mobile-ads",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kazutoyo/expo-google-mobile-ads.git"
+  },
   "bugs": {
     "url": "https://github.com/kazutoyo/expo-google-mobile-ads/issues"
   },
   "author": "Kazutoyo Tokai <tokai.kazutoyo@tellernovel.com> (https://github.com/kazutoyo)",
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "homepage": "https://github.com/kazutoyo/expo-google-mobile-ads#readme",
   "devDependencies": {
     "@babel/core": "^7.26.0",

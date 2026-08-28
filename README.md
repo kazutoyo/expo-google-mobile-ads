@@ -1,4 +1,8 @@
-# expo-google-mobile-ads
+# @kazutoyo/expo-google-mobile-ads
+
+[![npm](https://img.shields.io/npm/v/@kazutoyo/expo-google-mobile-ads)](https://www.npmjs.com/package/@kazutoyo/expo-google-mobile-ads)
+[![CI](https://github.com/kazutoyo/expo-google-mobile-ads/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/kazutoyo/expo-google-mobile-ads/actions/workflows/ci.yml)
+[![License](https://img.shields.io/npm/l/@kazutoyo/expo-google-mobile-ads)](LICENSE)
 
 *(English | [日本語](./README.ja.md))*
 
@@ -37,7 +41,7 @@ Not yet supported:
 ## Installation
 
 ```sh
-npx expo install expo-google-mobile-ads
+npx expo install @kazutoyo/expo-google-mobile-ads
 ```
 
 ### Config plugin
@@ -49,7 +53,7 @@ Pass your AdMob App IDs to the plugin's config in `app.json` (or `app.config.js`
   "expo": {
     "plugins": [
       [
-        "expo-google-mobile-ads",
+        "@kazutoyo/expo-google-mobile-ads",
         {
           "androidAppId": "ca-app-pub-3940256099942544~3347511713",
           "iosAppId": "ca-app-pub-3940256099942544~1458002511"
@@ -69,7 +73,7 @@ Passing `delayAppMeasurementInit: true` writes a setting on both platforms that 
 Call `initialize()` once at app startup, before loading any ads.
 
 ```typescript
-import { initialize } from 'expo-google-mobile-ads';
+import { initialize } from '@kazutoyo/expo-google-mobile-ads';
 
 await initialize();
 ```
@@ -85,7 +89,7 @@ Calling `createBannerAd()`, `createInterstitialAd()`, or `createRewardedAd()` be
 The Google User Messaging Platform (UMP) SDK collects the consent (GDPR in the EEA, and equivalent regimes elsewhere) that decides whether your app may request ads at all. Run it before `initialize()` — until you know `canRequestAds`, nothing else about ad loading is safe to do.
 
 ```typescript
-import { gatherConsent, initialize } from 'expo-google-mobile-ads';
+import { gatherConsent, initialize } from '@kazutoyo/expo-google-mobile-ads';
 
 const { canRequestAds } = await gatherConsent();
 if (canRequestAds) await initialize();
@@ -116,7 +120,7 @@ function resetConsent(): Promise<ConsentInfo>;
 ### `useConsentInfo()`
 
 ```tsx
-import { useConsentInfo, showPrivacyOptionsForm } from 'expo-google-mobile-ads';
+import { useConsentInfo, showPrivacyOptionsForm } from '@kazutoyo/expo-google-mobile-ads';
 
 function PrivacySettingsRow() {
   const { privacyOptionsRequirement } = useConsentInfo();
@@ -190,7 +194,7 @@ Creating an ad instance (which starts loading) and displaying it on screen are i
 
 ```typescript
 // e.g. at module scope, or anywhere before a screen transition
-import { createBannerAd, BannerAdSize } from 'expo-google-mobile-ads';
+import { createBannerAd, BannerAdSize } from '@kazutoyo/expo-google-mobile-ads';
 
 export const homeBannerAd = createBannerAd({
   adUnitId: 'ca-app-pub-3940256099942544/9214589741',
@@ -200,7 +204,7 @@ export const homeBannerAd = createBannerAd({
 
 ```tsx
 // in the screen component
-import { useBannerAdState, BannerAdView } from 'expo-google-mobile-ads';
+import { useBannerAdState, BannerAdView } from '@kazutoyo/expo-google-mobile-ads';
 import { homeBannerAd } from './ads';
 
 function HomeScreen() {
@@ -224,7 +228,7 @@ The two hooks differ in what they own of the ad's lifetime.
 For the simple case where the ad's lifetime matches the screen's (no preloading), use `useBannerAd`.
 
 ```tsx
-import { useBannerAd, BannerAdSize, BannerAdView } from 'expo-google-mobile-ads';
+import { useBannerAd, BannerAdSize, BannerAdView } from '@kazutoyo/expo-google-mobile-ads';
 
 function Screen() {
   const { ad, isLoaded, error } = useBannerAd({
@@ -251,7 +255,7 @@ const subscription = ad.addListener('statusChange', ({ status }) => {
 ## BannerAdSize
 
 ```typescript
-import { BannerAdSize } from 'expo-google-mobile-ads';
+import { BannerAdSize } from '@kazutoyo/expo-google-mobile-ads';
 ```
 
 Fixed sizes:
@@ -285,7 +289,7 @@ Orientation is folded into the marker rather than kept as a separate field, beca
 `options` for `anchoredAdaptive` / `largeAnchoredAdaptive` is `{ width?: number; orientation?: 'current' | 'portrait' | 'landscape' }` (defaults to screen width and `'current'`). To recompute the size when the device rotates, use the `useBannerAdSize(spec)` hook.
 
 ```typescript
-import { useBannerAdSize } from 'expo-google-mobile-ads';
+import { useBannerAdSize } from '@kazutoyo/expo-google-mobile-ads';
 
 const size = useBannerAdSize({ type: 'largeAnchoredAdaptive' });
 ```
@@ -309,7 +313,7 @@ The returned `height` is a **maximum**, not the final height — the served ad m
 Full-screen ads have no view — they are created and shown, not rendered. `createInterstitialAd({ adUnitId, requestOptions })` and `createRewardedAd({ adUnitId, requestOptions })` return `SharedObject`s that start loading immediately, so — same as `createBannerAd` — they can be created outside React: at app startup, or before a screen transition.
 
 ```typescript
-import { createInterstitialAd, createRewardedAd } from 'expo-google-mobile-ads';
+import { createInterstitialAd, createRewardedAd } from '@kazutoyo/expo-google-mobile-ads';
 
 export const interstitialAd = createInterstitialAd({
   adUnitId: 'ca-app-pub-3940256099942544/1033173712',
@@ -332,7 +336,7 @@ The same ownership split as the banner hooks above, doubled for the two ad types
 | `useRewardedAdState(ad)` | no (subscribes to an existing `ad`) | **no** |
 
 ```tsx
-import { useInterstitialAd } from 'expo-google-mobile-ads';
+import { useInterstitialAd } from '@kazutoyo/expo-google-mobile-ads';
 
 function Screen() {
   const { ad, isLoaded } = useInterstitialAd({
@@ -390,7 +394,7 @@ The example below uses AppLovin as a fully worked reference — a real, current 
   "expo": {
     "plugins": [
       [
-        "expo-google-mobile-ads",
+        "@kazutoyo/expo-google-mobile-ads",
         {
           "androidAppId": "ca-app-pub-xxxx~yyyy",
           "iosAppId": "ca-app-pub-xxxx~zzzz",

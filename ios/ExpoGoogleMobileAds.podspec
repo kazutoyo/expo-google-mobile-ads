@@ -1,6 +1,11 @@
+require 'json'
+
+# Single source of truth for the version: the podspec and package.json can never drift.
+package = JSON.parse(File.read(File.join(__dir__, '..', 'package.json')))
+
 Pod::Spec.new do |s|
   s.name           = 'ExpoGoogleMobileAds'
-  s.version        = '0.1.0'
+  s.version        = package['version']
   s.summary        = 'Expo Module wrapping the Google Mobile Ads (AdMob) SDK'
   s.description    = 'Expo Module wrapping the Google Mobile Ads (AdMob) SDK'
   s.author         = 'Kazutoyo Tokai <tokai.kazutoyo@tellernovel.com>'

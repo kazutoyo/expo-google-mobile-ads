@@ -1,0 +1,139 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Nothing here writes to the repository, and `npm ci` runs dependency
+# lifecycle code, so the job token gets no more than it reads with.
+permissions:
+  contents: read
+
+jobs:
+  javascript:
+    name: JavaScript
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          # 26, not an LTS 24: under Node 24 jest-expo installs a lazy
+          # `global.fetch` getter (expo/src/winter/runtime.native.ts) that fires
+          # during its own setup, before `react-native` has initialised. It
+          # requires expo-modules-core, whose Platform.ts reads `Platform.select`
+          # off an undefined import and leaves the module half-built, so six
+          # suites fail to load. Node 26 never installs the getter. The library
+          # itself is unaffected — this is the test harness only.
+          node-version: 26
+          cache: npm
+
+      # `prepare` builds `build/` and `plugin/build/` as part of the install, so
+      # everything below runs against the same output that gets published.
+      - run: npm ci
+
+      - run: npm test
+      - run: npm run lint
+      - run: npm run typecheck
+
+      # The example resolves the library through metro to `src`, so this is what
+      # catches a prop or an option that exists in the TypeScript API but was
+      # never wired through to the native module.
+      - run: npm ci
+        working-directory: example
+      - run: npx tsc --noEmit
+        working-directory: example
+
+      # `files` in package.json decides what a consumer actually gets, and the
+      # two build outputs are both generated — neither is in git, so nothing
+      # else here would notice them going missing from the tarball.
+      - name: Check the tarball has both build outputs
+        run: |
+          npm pack
+          tar -tzf kazutoyo-expo-google-mobile-ads-*.tgz > /tmp/tarball.txt
+          for entry in package/build/index.js package/plugin/build/index.js \
+                       package/app.plugin.js package/expo-module.config.json; do
+            grep -qx "$entry" /tmp/tarball.txt || { echo "missing from tarball: $entry"; exit 1; }
+          done
+          # Tests are excluded by `files`; a stray one means the pattern broke.
+          ! grep -q '\.test\.tsx\?$' /tmp/tarball.txt || { echo "tests leaked into tarball"; exit 1; }
+
+  ios:
+    name: iOS build
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          # 26, not an LTS 24: under Node 24 jest-expo installs a lazy
+          # `global.fetch` getter (expo/src/winter/runtime.native.ts) that fires
+          # during its own setup, before `react-native` has initialised. It
+          # requires expo-modules-core, whose Platform.ts reads `Platform.select`
+          # off an undefined import and leaves the module half-built, so six
+          # suites fail to load. Node 26 never installs the getter. The library
+          # itself is unaffected — this is the test harness only.
+          node-version: 26
+          cache: npm
+      - run: npm ci
+      - run: npm ci
+        working-directory: example
+
+      # Regenerates the native project from scratch so the config plugin runs
+      # for real — a bad Info.plist edit or a missing App ID shows up here and
+      # nowhere else.
+      - run: npx expo prebuild --platform ios --clean
+        working-directory: example
+
+      - name: Build
+        working-directory: example/ios
+        run: |
+          xcodebuild -version
+          # The workspace is named after the app slug, so read it rather than
+          # hardcoding it — a slug change would otherwise fail here obscurely.
+          workspace=$(ls -d *.xcworkspace)
+          xcodebuild \
+            -workspace "$workspace" \
+            -scheme "${workspace%.xcworkspace}" \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            -quiet \
+            build
+
+  android:
+    name: Android build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          # 26, not an LTS 24: under Node 24 jest-expo installs a lazy
+          # `global.fetch` getter (expo/src/winter/runtime.native.ts) that fires
+          # during its own setup, before `react-native` has initialised. It
+          # requires expo-modules-core, whose Platform.ts reads `Platform.select`
+          # off an undefined import and leaves the module half-built, so six
+          # suites fail to load. Node 26 never installs the getter. The library
+          # itself is unaffected — this is the test harness only.
+          node-version: 26
+          cache: npm
+      - uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
+        with:
+          distribution: temurin
+          java-version: 17
+      - run: npm ci
+      - run: npm ci
+        working-directory: example
+
+      - run: npx expo prebuild --platform android --clean
+        working-directory: example
+
+      - name: Build
+        working-directory: example/android
+        run: ./gradlew assembleDebug --no-daemon
