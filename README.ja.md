@@ -85,10 +85,10 @@ plugin が何を検証しているかは[インストールガイド](https://ka
 | [SDK の初期化](https://kazutoyo.github.io/expo-google-mobile-ads/ja/initialization) | ライブラリが自動で初期化しない理由 |
 | [同意管理 (UMP)](https://kazutoyo.github.io/expo-google-mobile-ads/ja/consent) | 同意フロー、`useConsentInfo()`、テスト方法 |
 | [バナー広告](https://kazutoyo.github.io/expo-google-mobile-ads/ja/banner-ads) | プリロード、hooks、自動リフレッシュ |
-| [BannerAdSize](https://kazutoyo.github.io/expo-google-mobile-ads/ja/banner-sizes) | 固定サイズとアダプティブサイズ |
+| [バナーサイズの選び方](https://kazutoyo.github.io/expo-google-mobile-ads/ja/banner-sizes) | 固定サイズとアダプティブサイズ |
 | [インタースティシャル / リワード広告](https://kazutoyo.github.io/expo-google-mobile-ads/ja/fullscreen-ads) | 使い切りの全画面広告、報酬 |
 | [メディエーション](https://kazutoyo.github.io/expo-google-mobile-ads/ja/mediation) | config plugin 経由でのアダプタ追加 |
-| [API リファレンス](https://kazutoyo.github.io/expo-google-mobile-ads/ja/api-reference) | パッケージルートからのエクスポート一覧 |
+| [API](https://kazutoyo.github.io/expo-google-mobile-ads/ja/api) | パッケージルートからのエクスポート一覧 |
 
 ## 開発
 

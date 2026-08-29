@@ -85,10 +85,10 @@ See the [installation guide](https://kazutoyo.github.io/expo-google-mobile-ads/i
 | [Initializing the SDK](https://kazutoyo.github.io/expo-google-mobile-ads/initialization) | Why the library never initializes itself |
 | [Consent (UMP)](https://kazutoyo.github.io/expo-google-mobile-ads/consent) | The consent flow, `useConsentInfo()`, testing |
 | [Banner ads](https://kazutoyo.github.io/expo-google-mobile-ads/banner-ads) | Preloading, hooks, auto-refresh |
-| [BannerAdSize](https://kazutoyo.github.io/expo-google-mobile-ads/banner-sizes) | Fixed and adaptive sizes |
+| [Choosing a banner size](https://kazutoyo.github.io/expo-google-mobile-ads/banner-sizes) | Fixed and adaptive sizes |
 | [Interstitial and rewarded ads](https://kazutoyo.github.io/expo-google-mobile-ads/fullscreen-ads) | Single-use full-screen ads, rewards |
 | [Mediation](https://kazutoyo.github.io/expo-google-mobile-ads/mediation) | Adding adapters through the config plugin |
-| [API reference](https://kazutoyo.github.io/expo-google-mobile-ads/api-reference) | Everything exported from the package root |
+| [API](https://kazutoyo.github.io/expo-google-mobile-ads/api) | Everything exported from the package root |
 
 ## Contributing
 
