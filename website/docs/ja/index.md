@@ -3,30 +3,31 @@ title: "はじめに"
 description: "Expo Modules ネイティブな Google Mobile Ads (AdMob) SDK ラッパーです。"
 ---
 
-Expo Modules ネイティブな [Google Mobile Ads (AdMob)](https://developers.google.com/admob) SDK ラッパーです。バナー・インタースティシャル・リワード広告と、UMP 同意管理に対応しています。
+Expo Modules ネイティブな [Google Mobile Ads (AdMob)](https://developers.google.com/admob) SDK ラッパーです。Android は [GMA Next-Gen SDK](https://developers.google.com/admob/android/next-gen/quick-start)、iOS は Google Mobile Ads SDK v13 系を使っています。
 
-## なぜこのライブラリか
+```sh
+npx expo install @kazutoyo/expo-google-mobile-ads
+```
 
-このライブラリの設計は、広告インスタンスと表示 View を分けるところから始まっています。広告は Expo Modules API の `SharedObject` として持っているので、View がなくても生成できますし、生成した時点でロードが走ります。画面が現れる前に、広告だけ先に用意しておけます。
+## できること
 
-- **プリロードできる** — `createBannerAd()` は React の外から呼べます。画面遷移の前でも、アプリ起動時でも構いません。ロードは View を待たずに始まり（`initialize()` が終わるまでは内部のキューに積まれます）、View は後から付ければ大丈夫です
-- **画面をまたいで再利用できる** — `<BannerAdView ad={ad} />` はアンマウント時にデタッチするだけで、広告そのものは破棄しません。同じ広告を別の画面でそのまま表示できます
-- **hooks が薄い** — `useBannerAd` / `useBannerAdState` は命令的な API のラッパーでしかありません。hooks で足りない場面では、下の層をそのまま触れます
-- **レイアウトシフトが起きない** — `BannerAdSize` のサイズ計算はロードを待たない同期関数です。広告が届く前に表示領域を確定できます
+- **バナー広告** — 固定サイズとアダプティブサイズに対応しています。広告は表示する View とは独立して生成できるので、画面が現れる前にロードを始められます
+- **インタースティシャル広告 / リワード広告** — こちらも同じくプリロードできます。`show()` は Promise を返し、リワード広告は獲得した報酬で resolve します
+- **UMP 同意管理** — 同意の取得、フォームの表示、プライバシーオプションの再表示
+- **config plugin** — App ID をネイティブプロジェクトに埋め込み、メディエーションアダプタの依存も追加できます
 
-`react-native-google-mobile-ads` は React Native の TurboModules 向けで、広告は表示する View と一体で生成されます。プリロードを前提に組みたい場合は、この違いが効いてくるかと思います。
+未対応なのは、ネイティブ広告・アプリ起動時広告（App Open）・リワード広告のサーバーサイド検証です。
 
-Android は [GMA Next-Gen SDK](https://developers.google.com/admob/android/next-gen/quick-start)、iOS は Google Mobile Ads SDK v13 系を使っています。
+## 動作要件
 
-## サポート範囲
-
-- **New Architecture 専用**です。Old Architecture は対象外です
 - **Expo SDK 57 以降** — `peerDependencies` に書いているので、バージョンが合わないときはネイティブビルドを待たずに npm/yarn の時点でわかります
+- **New Architecture 専用**です。Old Architecture は対象外です
 - **iOS 16.4 以降**、**Android minSdk 24 以降**。iOS の下限は広告 SDK ではなく Expo 側の都合で、`ExpoModulesCore` が SDK 56 以降 `:ios => '16.4'` を宣言しています（広告 SDK v13 自体は iOS 13 で動きます）。アプリの `ios.deploymentTarget` がこれより低いと pod を入れられません
-- バナー・インタースティシャル・リワード広告・UMP 同意管理（フェーズ1〜3）
 
-未対応:
+ネイティブコードを含むため、**Expo Go では動きません**。development build が必要になります。
 
-- ネイティブ広告 — フェーズ4
-- アプリ起動時広告（App Open）
-- リワード広告のサーバーサイド検証
+## はじめかた
+
+まず [インストール](/ja/installation) で、config plugin に App ID を渡すところから始めます。
+
+そのあとは、[同意管理 (UMP)](/ja/consent) で同意を取り、[SDK の初期化](/ja/initialization) を済ませてから、[バナー広告](/ja/banner-ads) や [インタースティシャル / リワード広告](/ja/fullscreen-ads) をロードする、という流れになります。

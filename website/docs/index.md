@@ -3,34 +3,31 @@ title: "Introduction"
 description: "An Expo Modules native wrapper for the Google Mobile Ads (AdMob) SDK."
 ---
 
-An Expo Modules native wrapper for the [Google Mobile Ads (AdMob)](https://developers.google.com/admob) SDK. Currently supports banner, interstitial, and rewarded ads, plus UMP consent management.
+An Expo Modules native wrapper for the [Google Mobile Ads (AdMob)](https://developers.google.com/admob) SDK. Android uses the [GMA Next-Gen SDK](https://developers.google.com/admob/android/next-gen/quick-start); iOS uses the Google Mobile Ads SDK v13.
 
-## Why this library
+```sh
+npx expo install @kazutoyo/expo-google-mobile-ads
+```
 
-The design turns on one decision: the ad and the view that displays it are separate objects. An ad is a `SharedObject` from the Expo Modules API, so it exists without a view and starts loading the moment it is created. An ad can be ready before the screen that shows it exists.
+## What it does
 
-- **Preloadable** — `createBannerAd()` can be called outside React, before a screen transition or at app startup. Loading starts without waiting for a view (queued until `initialize()` completes), and the view is attached later.
-- **Reusable across screens** — `<BannerAdView ad={ad} />` detaches on unmount without destroying the ad, so the same instance can be shown again on another screen.
-- **Thin hooks** — `useBannerAd` / `useBannerAdState` wrap the imperative API and nothing else. When they don't fit, the layer underneath is right there.
-- **No layout shift** — `BannerAdSize` computes sizes synchronously, without waiting for a load, so the display area can be reserved before the ad arrives.
+- **Banner ads** — fixed and adaptive sizes. An ad is created independently of the view that displays it, so loading can start before the screen exists.
+- **Interstitial and rewarded ads** — preloadable in the same way. `show()` returns a promise, and a rewarded ad resolves with the reward the user earned.
+- **UMP consent** — gathering consent, showing the form, and reopening the privacy options.
+- **Config plugin** — writes your App IDs into the native projects, and adds mediation adapter dependencies.
 
-`react-native-google-mobile-ads` targets React Native's TurboModules, where an ad is created together with the view that displays it. If you want to preload, that is the difference that matters.
+Not supported: native ads, app-open ads, and server-side verification for rewarded ads.
 
-Android uses the [GMA Next-Gen SDK](https://developers.google.com/admob/android/next-gen/quick-start); iOS uses the Google Mobile Ads SDK v13.
+## Requirements
 
-## Scope
-
+- **Expo SDK 57+** — declared as a `peerDependencies` constraint, so a mismatched version surfaces at install time instead of failing later in the native build.
 - **New Architecture only.** Old Architecture is not supported.
-- **Expo SDK 57+** — declared as a `peerDependencies` constraint, so npm/yarn surfaces a
-  mismatched install instead of failing later in the native build.
-- **iOS 16.4+**, **Android minSdk 24+**. The iOS floor comes from Expo itself
-  (`ExpoModulesCore` declares `:ios => '16.4'` from SDK 56 on), not from the ads SDK — Google
-  Mobile Ads SDK v13 only needs iOS 13. An app whose `ios.deploymentTarget` is lower than 16.4
-  cannot install this pod.
-- Banner, interstitial, rewarded ads, and UMP consent (phases 1–3)
+- **iOS 16.4+**, **Android minSdk 24+**. The iOS floor comes from Expo itself — `ExpoModulesCore` declares `:ios => '16.4'` from SDK 56 on — not from the ads SDK, which only needs iOS 13. An app whose `ios.deploymentTarget` is lower cannot install this pod.
 
-Not yet supported:
+The module contains native code, so **it does not run in Expo Go**. You need a development build.
 
-- Native ads — phase 4
-- App-open ads
-- Server-side verification for rewarded ads
+## Getting started
+
+Start with [Installation](/installation), where the config plugin takes your App IDs.
+
+From there: gather consent in [Consent (UMP)](/consent), call `initialize()` as described in [Initializing the SDK](/initialization), and then load [banner](/banner-ads) or [interstitial and rewarded](/fullscreen-ads) ads.
