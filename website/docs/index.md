@@ -3,34 +3,31 @@ title: "Introduction"
 description: "An Expo Modules native wrapper for the Google Mobile Ads (AdMob) SDK."
 ---
 
-An Expo Modules native wrapper for the [Google Mobile Ads (AdMob)](https://developers.google.com/admob) SDK. Currently supports banner, interstitial, and rewarded ads, plus UMP consent management.
+An Expo Modules native wrapper for the [Google Mobile Ads (AdMob)](https://developers.google.com/admob) SDK. Android uses the [GMA Next-Gen SDK](https://developers.google.com/admob/android/next-gen/quick-start); iOS uses the Google Mobile Ads SDK v13.
 
-## Why this library
+```sh
+npx expo install @kazutoyo/expo-google-mobile-ads
+```
 
-The existing `react-native-google-mobile-ads` targets React Native (TurboModules) and still carries Old Architecture compatibility baggage. The biggest cost of that: **ads can't be preloaded** — an ad can only be created together with the view that displays it.
+## What it does
 
-This library is built on the Expo Modules API (`SharedObject`), with the ad instance and the display view deliberately kept separate.
+- **Banner ads** — fixed and adaptive sizes. An ad is created independently of the view that displays it, so loading can start before the screen exists.
+- **Interstitial and rewarded ads** — preloadable in the same way. `show()` returns a promise, and a rewarded ad resolves with the reward the user earned.
+- **UMP consent** — gathering consent, showing the form, and reopening the privacy options.
+- **Config plugin** — writes your App IDs into the native projects, and adds mediation adapter dependencies.
 
-- **Preloadable** — `createBannerAd()` can be called outside React, before a screen transition or at app startup. Loading starts without waiting for a view — it is queued until `initialize()` completes — and the view can be attached later.
-- **Reusable across screens** — `<BannerAdView ad={ad} />` **only detaches, never destroys**, the ad on unmount. The same ad instance can be shown again on a different screen.
-- **Hooks-based** — from React, `useBannerAd` / `useBannerAdState` are thin wrappers, nothing more.
-- **No layout shift** — `BannerAdSize` computes sizes with a synchronous function that doesn't wait for a load, so the display area can be reserved before the ad arrives.
+Not supported: native ads, app-open ads, and server-side verification for rewarded ads.
 
-Android uses the [GMA Next-Gen SDK](https://developers.google.com/admob/android/next-gen/quick-start); iOS uses the Google Mobile Ads SDK v13.
+## Requirements
 
-## Scope
-
+- **Expo SDK 57+** — declared as a `peerDependencies` constraint, so a mismatched version surfaces at install time instead of failing later in the native build.
 - **New Architecture only.** Old Architecture is not supported.
-- **Expo SDK 57+** — declared as a `peerDependencies` constraint, so npm/yarn surfaces a
-  mismatched install instead of failing later in the native build.
-- **iOS 16.4+**, **Android minSdk 24+**. The iOS floor comes from Expo itself
-  (`ExpoModulesCore` declares `:ios => '16.4'` from SDK 56 on), not from the ads SDK — Google
-  Mobile Ads SDK v13 only needs iOS 13. An app whose `ios.deploymentTarget` is lower than 16.4
-  cannot install this pod.
-- Banner, interstitial, rewarded ads, and UMP consent (phases 1–3)
+- **iOS 16.4+**, **Android minSdk 24+**. The iOS floor comes from Expo itself — `ExpoModulesCore` declares `:ios => '16.4'` from SDK 56 on — not from the ads SDK, which only needs iOS 13. An app whose `ios.deploymentTarget` is lower cannot install this pod.
 
-Not yet supported:
+The module contains native code, so **it does not run in Expo Go**. You need a development build.
 
-- Native ads — phase 4
-- App-open ads
-- Server-side verification for rewarded ads
+## Getting started
+
+Start with [Installation](/installation), where the config plugin takes your App IDs.
+
+From there: gather consent in [Consent (UMP)](/consent), call `initialize()` as described in [Initializing the SDK](/initialization), and then load [banner](/banner-ads) or [interstitial and rewarded](/fullscreen-ads) ads.

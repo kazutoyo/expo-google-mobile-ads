@@ -1,9 +1,9 @@
 ---
 title: "インタースティシャル / リワード広告"
-description: "使い切りの全画面広告。描画ではなく表示するもので、報酬の獲得判定には決まりがある。"
+description: "使い切りの全画面広告。描画ではなく表示するもので、報酬の獲得判定には決まりがあります。"
 ---
 
-フルスクリーン広告には View がない——生成して表示するものであり、レンダリングするものではない。`createInterstitialAd({ adUnitId, requestOptions })` と `createRewardedAd({ adUnitId, requestOptions })` は、生成した瞬間にロードを開始する `SharedObject`(バナーと同じく `initialize()` の完了までは内部でキューイングされる)を返す。`createBannerAd` と同様に、React の外——アプリ起動時や画面遷移前——で呼べる。
+フルスクリーン広告に View はありません。生成して表示するもので、レンダリングするものではないためです。`createInterstitialAd({ adUnitId, requestOptions })` と `createRewardedAd({ adUnitId, requestOptions })` は、生成した瞬間にロードを始める `SharedObject` を返します（バナーと同じく `initialize()` の完了までは内部のキューに積まれます）。`createBannerAd` と同様に React の外から呼べるので、アプリ起動時でも画面遷移の前でも構いません。
 
 ```typescript
 import { createInterstitialAd, createRewardedAd } from '@kazutoyo/expo-google-mobile-ads';
@@ -19,7 +19,7 @@ export const rewardedAd = createRewardedAd({
 
 ## hooks
 
-[バナー用 hooks](/ja/banner-ads) と同じ所有権の区分が、2つの広告タイプ分だけある:
+[バナー用 hooks](/ja/banner-ads) と同じ所有権の区分が、2つの広告タイプ分あります。
 
 | hook | 広告を生成するか | アンマウント時に release するか |
 |---|---|---|
@@ -47,11 +47,11 @@ function Screen() {
 }
 ```
 
-プリロード済みの広告（上記の `interstitialAd` など）の状態を購読するだけなら、`useInterstitialAdState` / `useRewardedAdState` を使う——どちらも渡された `ad` の生成も release も行わない。呼び出し側が `ad` のライフタイムを管理する。
+プリロード済みの広告（上の `interstitialAd` など）の状態を購読するだけなら `useInterstitialAdState` / `useRewardedAdState` を使います。どちらも生成も release もしないので、`ad` のライフタイムは呼び出し側が持つことになります。
 
 ## 単発利用
 
-フルスクリーン広告は一度しか表示できない。`show()` の後、`status` は `'shown'` になり、これは**終端状態**である——この状態の広告に `load()` を呼んでも何も起きない。両プラットフォームの SDK 自体もこれを独自に強制している（iOS は `AdAlreadyUsed`、Android は `AD_REUSED` を報告する）ため、回避する方法はない。次のインプレッションには `createInterstitialAd` / `createRewardedAd` で新しい広告を作ること。
+フルスクリーン広告は一度しか表示できません。`show()` の後、`status` は `'shown'` になります。これは**終端状態**で、`load()` を呼んでも何も起きません。両プラットフォームの SDK 側も独自にこれを強制しているので（iOS は `AdAlreadyUsed`、Android は `AD_REUSED`）、回避する方法はありません。次のインプレッションには `createInterstitialAd` / `createRewardedAd` で作り直してください。
 
 ## `show()`
 
@@ -60,21 +60,21 @@ show(): Promise<void>;             // InterstitialAd
 show(): Promise<AdReward | null>;  // RewardedAd
 ```
 
-ユーザーが広告を閉じると resolve する。リワード広告の場合は、ユーザーが獲得した `AdReward` で resolve するか、獲得せずに閉じた場合は `null` で resolve する。
+ユーザーが広告を閉じた時点で resolve します。リワード広告なら獲得した `AdReward`、獲得せずに閉じたなら `null` が返ります。
 
-`ShowAdError` で reject し、その `code` は次のいずれかになる:
+`ShowAdError` で reject します。`code` は次のいずれかです。
 
-- `notLoaded` —広告がまだ準備できていない。`show()` を呼ぶ前に `isLoaded` を確認すること
-- `alreadyShown` — この広告の `status` はすでに `'shown'` である
-- `failedToShow` — SDK 自体が表示を拒否した
+- `notLoaded` — 広告がまだ準備できていません。`show()` の前に `isLoaded` を確認してください
+- `alreadyShown` — この広告の `status` はもう `'shown'` です
+- `failedToShow` — SDK 自体が表示を拒否しました
 
-**`show()` はロード中の広告をあえて待たない。** フルスクリーン広告を「ロードが終わり次第」表示すると、すでに別のことに気を移したユーザーの邪魔をしかねない——これはまさに Google 自身のポリシーガイダンスが警告している挙動である。ロードの後ろに `show()` 呼び出しをキューイングするのではなく、`isLoaded` を確認して、準備できていなければその広告は諦めること。
+**`show()` はロード中の広告をあえて待ちません。** 「ロードが終わり次第」表示すると、すでに別のことに移ったユーザーの邪魔をしかねないためです。Google 自身のポリシーガイダンスが警告しているのがまさにこれです。ロードの後ろに `show()` を積むのではなく、`isLoaded` を見て、準備できていなければその回は諦めるのがよいかと思います。
 
 ## `ad.reward` は獲得した証拠ではない
 
-`RewardedAd` の `reward` プロパティは、その広告が**提供するもの**である——ロードが終わり次第、まだ一度も表示されていない時点で読み取れる。これはプロンプトでユーザーに「何がもらえるか」を伝えるためのものだ。**これは報酬を獲得した証拠ではない。** 特に iOS では、この値は広告が表示される前の時点ですでに埋まっているため、その値が存在することだけをもって「ユーザーが広告を視聴した」とみなすと、表示直後に閉じたユーザーにも報酬を与えてしまう。
+`RewardedAd` の `reward` は、その広告が**提供するもの**を表しています。ロードが終わった時点、まだ一度も表示していない段階で読めます。ユーザーに「何がもらえるか」を先に見せるためのものです。**獲得した証拠ではありません。** 特に iOS では表示前からこの値が埋まっているので、値があることをもって「視聴した」とみなすと、開いてすぐ閉じたユーザーにも報酬が出てしまいます。
 
-**報酬が獲得されたかどうかの唯一の正しい情報源は、`show()` が resolve する値である。** 報酬はそこで付与すること——`ad.reward` からは絶対に付与しないこと。
+**獲得したかどうかの唯一の正しい情報源は `show()` が resolve する値です。** 付与はそこで行ってください。`ad.reward` から付与してはいけません。
 
 ```typescript
 try {
