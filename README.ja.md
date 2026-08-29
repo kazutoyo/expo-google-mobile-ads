@@ -6,22 +6,22 @@
 
 *([English](./README.md) | 日本語)*
 
-Expo Modules ネイティブな [Google Mobile Ads (AdMob)](https://developers.google.com/admob) SDK ラッパー。現時点ではバナー・インタースティシャル・リワード広告に加え、UMP 同意管理をサポートする。
+Expo Modules ネイティブな [Google Mobile Ads (AdMob)](https://developers.google.com/admob) SDK ラッパー。バナー・インタースティシャル・リワード広告と、UMP 同意管理に対応している。
 
 📖 **[ドキュメント](https://kazutoyo.github.io/expo-google-mobile-ads/ja)** — インストール、同意管理、各広告フォーマット、API リファレンス。
 
 ## なぜこのライブラリか
 
-既存の `react-native-google-mobile-ads` は React Native(TurboModules)を対象としており、Old Architecture 互換の名残を抱えている。その最大の代償が、**広告をプリロードできない**こと — 広告は表示するビューと一緒にしか生成できない。
+設計の中心は、広告インスタンスと表示 View を分けたことにある。Expo Modules API の `SharedObject` で広告を持つので、広告は View と無関係に生成でき、生成した時点でロードが走る。画面が現れる前に広告を用意しておける。
 
-このライブラリは Expo Modules API(`SharedObject`)の上に構築されており、広告インスタンスと表示ビューを意図的に分離している。
+- **プリロードできる** — `createBannerAd()` は React の外、画面遷移の前でもアプリ起動時でも呼べる。ロードは View を待たずに始まり（`initialize()` の完了までは内部のキューに積まれる）、View は後から付ければよい
+- **画面をまたいで再利用できる** — `<BannerAdView ad={ad} />` はアンマウント時にデタッチするだけで、広告を破棄しない。同じ広告を別の画面でそのまま出せる
+- **hooks が薄い** — `useBannerAd` / `useBannerAdState` は命令的な API のラッパーでしかない。hooks で足りなければ、下の層をそのまま触れる
+- **レイアウトシフトが起きない** — `BannerAdSize` のサイズ計算は同期関数で、ロードを待たない。広告が届く前に表示領域を確定できる
 
-- **プリロード可能** — `createBannerAd()` は React の外で、画面遷移の前やアプリ起動時に呼べる。ロードはビューを待たずに始まり(`initialize()` が完了するまでは内部でキューイングされる)、ビューは後から取り付けられる
-- **画面をまたいで再利用可能** — `<BannerAdView ad={ad} />` はアンマウント時に**デタッチするだけで破棄しない**。同じ広告インスタンスを別の画面で再表示できる
-- **hooks ベース** — React からは `useBannerAd` / `useBannerAdState` という薄いラッパーを使う。それ以上のことはしない
-- **レイアウトシフトなし** — `BannerAdSize` はロードを待たない同期関数でサイズを計算するため、広告が届く前に表示領域を確保できる
+`react-native-google-mobile-ads` は React Native の TurboModules 向けで、広告は表示する View と一体で生成される。プリロードを前提に組むなら、この違いが効いてくる。
 
-Android は [GMA Next-Gen SDK](https://developers.google.com/admob/android/next-gen/quick-start)、iOS は Google Mobile Ads SDK v13 を使う。
+Android は [GMA Next-Gen SDK](https://developers.google.com/admob/android/next-gen/quick-start)、iOS は Google Mobile Ads SDK v13 系を使う。
 
 ## サポート範囲
 
@@ -29,7 +29,7 @@ Android は [GMA Next-Gen SDK](https://developers.google.com/admob/android/next-
 - **Expo SDK 57 以降**、**iOS 16.4 以降**、**Android minSdk 24 以降**
 - バナー・インタースティシャル・リワード広告・UMP 同意管理
 
-未対応: ネイティブ広告、アプリ起動時広告(App Open)、リワード広告のサーバーサイド検証。
+未対応: ネイティブ広告、アプリ起動時広告（App Open）、リワード広告のサーバーサイド検証。
 
 ## インストール
 
@@ -37,7 +37,7 @@ Android は [GMA Next-Gen SDK](https://developers.google.com/admob/android/next-
 npx expo install @kazutoyo/expo-google-mobile-ads
 ```
 
-このモジュールはネイティブコードを含むため、**Expo Go では動作しない**。development build が必要になる。
+ネイティブコードを含むので、**Expo Go では動かない**。development build が要る。
 
 AdMob の App ID を `app.json` の config plugin に渡す:
 
@@ -57,7 +57,7 @@ AdMob の App ID を `app.json` の config plugin に渡す:
 }
 ```
 
-あとは同意を取得し、初期化し、広告をロードする:
+あとは同意を取り、初期化して、広告をロードする:
 
 ```typescript
 import { gatherConsent, initialize, createBannerAd, BannerAdSize } from '@kazutoyo/expo-google-mobile-ads';
@@ -75,14 +75,14 @@ export const homeBannerAd = createBannerAd({
 <BannerAdView ad={homeBannerAd} />
 ```
 
-plugin が何を検証しているか、なぜそうしているかは[インストールガイド](https://kazutoyo.github.io/expo-google-mobile-ads/ja/installation)、UMP のフロー全体は[同意管理のページ](https://kazutoyo.github.io/expo-google-mobile-ads/ja/consent)を参照。
+plugin が何を検証しているかは[インストールガイド](https://kazutoyo.github.io/expo-google-mobile-ads/ja/installation)、UMP のフロー全体は[同意管理](https://kazutoyo.github.io/expo-google-mobile-ads/ja/consent)を参照。
 
 ## ドキュメント
 
 | | |
 |---|---|
 | [インストール](https://kazutoyo.github.io/expo-google-mobile-ads/ja/installation) | config plugin、App ID、development build |
-| [SDK の初期化](https://kazutoyo.github.io/expo-google-mobile-ads/ja/initialization) | なぜライブラリが自動で初期化しないのか |
+| [SDK の初期化](https://kazutoyo.github.io/expo-google-mobile-ads/ja/initialization) | ライブラリが自動で初期化しない理由 |
 | [同意管理 (UMP)](https://kazutoyo.github.io/expo-google-mobile-ads/ja/consent) | 同意フロー、`useConsentInfo()`、テスト方法 |
 | [バナー広告](https://kazutoyo.github.io/expo-google-mobile-ads/ja/banner-ads) | プリロード、hooks、自動リフレッシュ |
 | [BannerAdSize](https://kazutoyo.github.io/expo-google-mobile-ads/ja/banner-sizes) | 固定サイズとアダプティブサイズ |
@@ -92,7 +92,7 @@ plugin が何を検証しているか、なぜそうしているかは[インス
 
 ## 開発
 
-ドキュメントサイトは [`website/`](website) にあり、[Blume](https://useblume.dev/) で構築している。`cd website && npm install && npm run dev` で編集できる。
+ドキュメントサイトは [`website/`](website) にあり、[Blume](https://useblume.dev/) で作っている。`cd website && npm install && npm run dev` で編集できる。
 
 ## ライセンス
 

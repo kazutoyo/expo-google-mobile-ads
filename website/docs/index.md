@@ -7,14 +7,14 @@ An Expo Modules native wrapper for the [Google Mobile Ads (AdMob)](https://devel
 
 ## Why this library
 
-The existing `react-native-google-mobile-ads` targets React Native (TurboModules) and still carries Old Architecture compatibility baggage. The biggest cost of that: **ads can't be preloaded** — an ad can only be created together with the view that displays it.
+The design turns on one decision: the ad and the view that displays it are separate objects. An ad is a `SharedObject` from the Expo Modules API, so it exists without a view and starts loading the moment it is created. An ad can be ready before the screen that shows it exists.
 
-This library is built on the Expo Modules API (`SharedObject`), with the ad instance and the display view deliberately kept separate.
+- **Preloadable** — `createBannerAd()` can be called outside React, before a screen transition or at app startup. Loading starts without waiting for a view (queued until `initialize()` completes), and the view is attached later.
+- **Reusable across screens** — `<BannerAdView ad={ad} />` detaches on unmount without destroying the ad, so the same instance can be shown again on another screen.
+- **Thin hooks** — `useBannerAd` / `useBannerAdState` wrap the imperative API and nothing else. When they don't fit, the layer underneath is right there.
+- **No layout shift** — `BannerAdSize` computes sizes synchronously, without waiting for a load, so the display area can be reserved before the ad arrives.
 
-- **Preloadable** — `createBannerAd()` can be called outside React, before a screen transition or at app startup. Loading starts without waiting for a view — it is queued until `initialize()` completes — and the view can be attached later.
-- **Reusable across screens** — `<BannerAdView ad={ad} />` **only detaches, never destroys**, the ad on unmount. The same ad instance can be shown again on a different screen.
-- **Hooks-based** — from React, `useBannerAd` / `useBannerAdState` are thin wrappers, nothing more.
-- **No layout shift** — `BannerAdSize` computes sizes with a synchronous function that doesn't wait for a load, so the display area can be reserved before the ad arrives.
+`react-native-google-mobile-ads` targets React Native's TurboModules, where an ad is created together with the view that displays it. If you want to preload, that is the difference that matters.
 
 Android uses the [GMA Next-Gen SDK](https://developers.google.com/admob/android/next-gen/quick-start); iOS uses the Google Mobile Ads SDK v13.
 
