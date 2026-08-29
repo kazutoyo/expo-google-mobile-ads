@@ -1,9 +1,9 @@
 ---
 title: "同意管理 (UMP)"
-description: "広告をリクエストする前に UMP の同意を取得し、canRequestAds で判定する。"
+description: "広告をリクエストする前に UMP の同意を取得し、canRequestAds で判定します。"
 ---
 
-Google User Messaging Platform (UMP) SDK は、そもそも広告をリクエストしてよいかを決める同意（EEA の GDPR と、他地域の同等の規制）を集める。`initialize()` より前に実行する。`canRequestAds` が分かるまで、広告ロードに関わることは何も始められない。
+Google User Messaging Platform (UMP) SDK は、そもそも広告をリクエストしてよいかを決める同意（EEA の GDPR と、他地域の同等の規制）を集めるものです。`initialize()` より前に実行してください。`canRequestAds` が分かるまでは、広告ロードに関わることは何も始められません。
 
 ```typescript
 import { gatherConsent, initialize } from '@kazutoyo/expo-google-mobile-ads';
@@ -12,11 +12,11 @@ const { canRequestAds } = await gatherConsent();
 if (canRequestAds) await initialize();
 ```
 
-**判定は `status` ではなく `canRequestAds` で行う。** 同意が不要なユーザー（EEA 圏外など）も、配信に最低限必要な範囲だけ同意したユーザーも、`canRequestAds` は `true` になる。`status` だけではこのどちらも判別できない。
+**判定は `status` ではなく `canRequestAds` で行ってください。** 同意が不要なユーザー（EEA 圏外など）も、配信に最低限必要な範囲だけ同意したユーザーも、`canRequestAds` は `true` になります。`status` だけではこのどちらも判別できません。
 
 ## 関数
 
-6つとも `ConsentInfo` のスナップショットで resolve し、`ConsentError`（`code: ConsentErrorCode`、後述）で reject する。
+6つとも `ConsentInfo` のスナップショットで resolve し、`ConsentError`（`code: ConsentErrorCode`、後述）で reject します。
 
 ```typescript
 function gatherConsent(options?: ConsentRequestOptions): Promise<ConsentInfo>;
@@ -27,12 +27,12 @@ function getConsentInfo(): Promise<ConsentInfo>;
 function resetConsent(): Promise<ConsentInfo>;
 ```
 
-- `gatherConsent(options?)` — 最新の同意情報を取得し、必要ならフォームも出す。ネイティブ側の1回の呼び出しにまとまっている。上のフローがこれ
-- `requestConsentInfoUpdate(options?)` — 同意情報の更新だけ行い、フォームは出さない。更新とフォーム表示のタイミングを分けたいときに使う。分ける必要がなければ `gatherConsent()` で足りる
-- `showConsentFormIfRequired()` — `status` が `'required'` のときだけフォームを出す。そうでなければ何も出さずに resolve する。先に `requestConsentInfoUpdate()` が成功している必要がある
-- `showPrivacyOptionsForm()` — 一度した選択を変えるためのフォームを出す。導線を置くのは `privacyOptionsRequirement` が `'required'` のときだけにする
-- `getConsentInfo()` — 通信せずに現在の同意情報を読む
-- `resetConsent()` — 保存済みの同意を消して、フォームを再表示できる状態に戻す。**開発ビルド限定**で、`__DEV__` が false なら no-op
+- `gatherConsent(options?)` — 最新の同意情報を取得し、必要ならフォームも出します。ネイティブ側の1回の呼び出しにまとまっています。上のフローがこれです
+- `requestConsentInfoUpdate(options?)` — 同意情報の更新だけ行い、フォームは出しません。更新とフォーム表示のタイミングを分けたいときに使います。分ける必要がなければ `gatherConsent()` で足ります
+- `showConsentFormIfRequired()` — `status` が `'required'` のときだけフォームを出します。そうでなければ何も出さずに resolve します。先に `requestConsentInfoUpdate()` が成功している必要があります
+- `showPrivacyOptionsForm()` — 一度した選択を変えるためのフォームを出します。導線を置くのは `privacyOptionsRequirement` が `'required'` のときだけにしてください
+- `getConsentInfo()` — 通信せずに現在の同意情報を読みます
+- `resetConsent()` — 保存済みの同意を消して、フォームを再表示できる状態に戻します。**開発ビルド限定**で、`__DEV__` が false のときは no-op です
 
 ## `useConsentInfo()`
 
@@ -46,13 +46,13 @@ function PrivacySettingsRow() {
 }
 ```
 
-`useConsentInfo()` は読み取り専用。自分から SDK を呼ぶことはなく、アプリ内で最後に走った同意呼び出しの結果を購読するだけだ。
+`useConsentInfo()` は読み取り専用です。自分から SDK を呼ぶことはなく、アプリ内で最後に走った同意呼び出しの結果を購読するだけになります。
 
-**マウント時に SDK の永続化済み同意情報を取り込むことはしない。** アプリを再起動すると、ネイティブ SDK が `'obtained'` を保持していても、同意関数が呼ばれるまで `status: 'unknown'` / `canRequestAds: false` を返し続ける。
+**マウント時に SDK の永続化済み同意情報を取り込むことはしません。** アプリを再起動すると、ネイティブ SDK が `'obtained'` を保持していても、同意関数が呼ばれるまで `status: 'unknown'` / `canRequestAds: false` を返し続けます。
 
-これは意図的だ。この hook が自分から SDK を呼ぶことは絶対にない。起動時フローは `gatherConsent()` をどのみち通るので影響を受けない。ただし、**`useConsentInfo()` だけを見て「プライバシーオプション」ボタンの表示を決める設定画面は、その起動中に `gatherConsent()`（か `getConsentInfo()`）を通っていない限り、再起動後は何も出さなくなる**。
+これは意図的な挙動です。この hook が自分から SDK を呼ぶことはありません。起動時フローは `gatherConsent()` をどのみち通るので影響を受けないのですが、**`useConsentInfo()` だけを見て「プライバシーオプション」ボタンの表示を決める設定画面は、その起動中に `gatherConsent()`（か `getConsentInfo()`）を通っていない限り、再起動後は何も出さなくなります**。ここは踏みやすいので気をつけてください。
 
-もう一点。`ConsentInfo` の4つのフィールドは、ユーザーが**どの選択肢**を選んだかでは変化しない。同意が要るか、広告をリクエストできるかを表すだけで、何を選んだかは持っていない。パーソナライズのトグルが反映されると期待しないこと。
+もう一点。`ConsentInfo` の4つのフィールドは、ユーザーが**どの選択肢**を選んだかでは変化しません。同意が要るか、広告をリクエストできるかを表すだけで、何を選んだかは持っていないためです。パーソナライズのトグルが反映されると期待しないでください。
 
 ## 型
 
@@ -88,7 +88,7 @@ function PrivacySettingsRow() {
 
 ## テスト方法
 
-`debugSettings.geography` で地域を指定すると、EEA 圏外のデバイスでも EEA のフローを再現できる。効くのは `testDeviceIds` に挙げたデバイスだけ:
+`debugSettings.geography` で地域を指定すると、EEA 圏外のデバイスでも EEA のフローを再現できます。効くのは `testDeviceIds` に挙げたデバイスだけです:
 
 ```typescript
 await gatherConsent({
@@ -96,13 +96,13 @@ await gatherConsent({
 });
 ```
 
-両 SDK とも、最初に同意関数を呼んだ時点で、そのデバイスの ID をコンソール（iOS）や logcat（Android）に出す。まず `testDeviceIds` なしで一度実行し、出た ID をコピーして追加する。
+両 SDK とも、最初に同意関数を呼んだ時点で、そのデバイスの ID をコンソール（iOS）や logcat（Android）に出してくれます。まず `testDeviceIds` なしで一度実行して、出た ID をコピーして追加するとよいかと思います。
 
-`resetConsent()` は**開発限定**だが、デバイスを再テスト可能にする唯一の手段でもある。SDK は同意を永続化するので、これを呼ばなければフローを通れるのは一度きり。以降はアプリを入れ直すまでフォームが出ない。
+`resetConsent()` は**開発限定**ですが、デバイスを再テスト可能にする唯一の手段でもあります。SDK は同意を永続化するので、これを呼ばないとフローを通れるのは一度きりです。以降はアプリを入れ直すまでフォームが出ません。
 
 ## プラットフォーム差
 
-- `isConsentFormAvailable` は、iOS の3値 `UMPFormStatus`（`unknown` / `available` / `unavailable`）を Android の boolean に丸めたもの。iOS の `unknown` は `false` になる
-- `misconfiguration` と `formUnavailable` は iOS でのみ発生する
-- `noActivity` は Android でのみ発生する
-- 同意関数はすべて両プラットフォームで `async`。iOS の `UMPConsentInformation` がプロパティの getter までメインスレッド専用のため
+- `isConsentFormAvailable` は、iOS の3値 `UMPFormStatus`（`unknown` / `available` / `unavailable`）を Android の boolean に丸めたものです。iOS の `unknown` は `false` になります
+- `misconfiguration` と `formUnavailable` は iOS でのみ発生します
+- `noActivity` は Android でのみ発生します
+- 同意関数はすべて両プラットフォームで `async` です。iOS の `UMPConsentInformation` がプロパティの getter までメインスレッド専用のためです
