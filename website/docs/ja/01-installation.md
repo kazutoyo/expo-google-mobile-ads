@@ -7,13 +7,11 @@ description: "パッケージのインストール、config plugin の設定、A
 npx expo install @kazutoyo/expo-google-mobile-ads
 ```
 
-ネイティブコードを含むので、**Expo Go では動きません**。development build が必要になります。ローカルなら `npx expo run:ios` / `npx expo run:android`、EAS なら `eas build --profile development` です。Expo Go のプロジェクトに入れると `requireNativeModule` で「モジュールが見つからない」と出ますが、これはライブラリの不具合ではありません。
-
-下の config plugin は App ID をネイティブプロジェクトに書き込みます。変更したときは再生成**と**ビルドの両方が必要です。`npx expo prebuild --clean` のあとに `npx expo run:ios` / `npx expo run:android`、または EAS でビルドし直してください。`prebuild` はプロジェクトを書き換えるだけで端末には何も入りませんし、JavaScript のリロードではどちらも起きません。
+ネイティブコードを含むため、**Expo Go では動きません**。development build が必要です。ローカルでは `npx expo run:ios` / `npx expo run:android`、EAS では `eas build --profile development` でビルドします。Expo Go のプロジェクトに入れると `requireNativeModule` が「モジュールが見つからない」というエラーを出しますが、これはライブラリの不具合ではありません。
 
 ## config plugin の設定
 
-`app.json`（または `app.config.js`）の `plugins` に AdMob の App ID を渡します。
+`app.json`（または `app.config.js`）の `plugins` に、AdMob の App ID を渡します。
 
 ```json
 {
@@ -31,8 +29,10 @@ npx expo install @kazutoyo/expo-google-mobile-ads
 }
 ```
 
-plugin はビルド時に App ID の有無と形式を検証します。未設定のときや、広告**ユニット** ID（`ca-app-pub-xxxx/yyyy` とスラッシュ区切り）を App ID の場所に渡したときは、その場でビルドを止めて理由を出します。App ID はチルダ区切りの `ca-app-pub-xxxxxxxxxxxxxxxx~xxxxxxxxxx` です。
+plugin はこの App ID をネイティブプロジェクトに書き込みます。App ID を変更したときは、プロジェクトの再生成**と**ビルドの両方が必要です。`npx expo prebuild --clean` を実行してから、`npx expo run:ios` / `npx expo run:android` か EAS でビルドし直してください。`prebuild` はプロジェクトファイルを書き換えるだけで、端末には何もインストールしません。JavaScript のリロードでは、どちらも実行されません。
 
-この取り違えは AdMob で最も多い間違いかと思います。素通ししてしまうと Google SDK の奥で iOS はクラッシュ、Android は例外になり、原因がまず分かりません。
+plugin はビルド時に、App ID の有無と形式を検証します。未設定のとき、または広告**ユニット** ID（`ca-app-pub-xxxx/yyyy` とスラッシュ区切り）を App ID の場所に渡したときは、その場でビルドを止めて理由を表示します。App ID はチルダ区切りの `ca-app-pub-xxxxxxxxxxxxxxxx~xxxxxxxxxx` です。
 
-`delayAppMeasurementInit: true` を渡すと、UMP の同意が取れるまで計測データの送信を遅らせる設定を両 OS に書き込みます（[同意管理 (UMP)](/ja/consent) を参照してください）。
+この2つの取り違えは、AdMob でよくある間違いです。検証せずに通すと、Google SDK の内部で iOS はクラッシュし、Android は例外を投げるため、原因の特定が難しくなります。
+
+`delayAppMeasurementInit: true` を渡すと、UMP の同意が取れるまで計測データの送信を遅らせる設定を、両 OS に書き込みます（[同意管理 (UMP)](/ja/consent) を参照してください）。

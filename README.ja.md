@@ -6,30 +6,30 @@
 
 *([English](./README.md) | 日本語)*
 
-Expo Modules ネイティブな [Google Mobile Ads (AdMob)](https://developers.google.com/admob) SDK ラッパーです。バナー・インタースティシャル・リワード広告と、UMP 同意管理に対応しています。
+[Google Mobile Ads (AdMob)](https://developers.google.com/admob) SDK を Expo Modules でラップしたライブラリです。バナー・インタースティシャル・リワード広告と、UMP 同意管理に対応しています。
 
-📖 **[ドキュメント](https://kazutoyo.github.io/expo-google-mobile-ads/ja)** — インストール、同意管理、各広告フォーマット、API リファレンスはこちらにあります。
+📖 **[ドキュメント](https://kazutoyo.github.io/expo-google-mobile-ads/ja)** — インストール、同意管理、各広告フォーマット、API リファレンス。
 
 ## なぜこのライブラリか
 
-このライブラリの設計は、広告インスタンスと表示 View を分けるところから始まっています。広告は Expo Modules API の `SharedObject` として持っているので、View がなくても生成できますし、生成した時点でロードが走ります。画面が現れる前に、広告だけ先に用意しておけます。
+このライブラリは、広告インスタンスと表示用の View を分ける設計です。広告は Expo Modules API の `SharedObject` として保持するため、View がなくても生成できます。生成した時点でロードが始まるので、画面が表示される前に広告を用意しておけます。
 
-- **プリロードできる** — `createBannerAd()` は React の外から呼べます。画面遷移の前でも、アプリ起動時でも構いません。ロードは View を待たずに始まり（`initialize()` が終わるまでは内部のキューに積まれます）、View は後から付ければ大丈夫です
+- **プリロードできる** — `createBannerAd()` は React の外から呼べます。アプリの起動時でも、画面遷移の前でもかまいません。ロードは View を待たずに始まり（`initialize()` が終わるまでは内部のキューに積まれます）、View は後から取り付けられます
 - **画面をまたいで再利用できる** — `<BannerAdView ad={ad} />` はアンマウント時にデタッチするだけで、広告そのものは破棄しません。同じ広告を別の画面でそのまま表示できます
-- **hooks が薄い** — `useBannerAd` / `useBannerAdState` は命令的な API のラッパーでしかありません。hooks で足りない場面では、下の層をそのまま触れます
-- **レイアウトシフトが起きない** — `BannerAdSize` のサイズ計算はロードを待たない同期関数です。広告が届く前に表示領域を確定できます
+- **hooks が薄い** — `useBannerAd` / `useBannerAdState` は、命令的な API のラッパーです。hooks で足りない場面では、その下の層を直接使えます
+- **レイアウトシフトが起きない** — `BannerAdSize` のサイズ計算は、ロードを待たない同期関数です。広告が届く前に表示領域を確定できます
 
-`react-native-google-mobile-ads` では、バナーは `<BannerAd unitId size />` というコンポーネントなので、バナー広告は表示する View と一緒に生成されます。インタースティシャルとリワードは独立したオブジェクト（`InterstitialAd.createForAdRequest()`）なのでプリロードできます。違いが出るのはバナーです。
+`react-native-google-mobile-ads` では、バナーが `<BannerAd unitId size />` というコンポーネントであるため、広告は表示用の View と一緒に生成されます。インタースティシャルとリワードは独立したオブジェクト（`InterstitialAd.createForAdRequest()`）なのでプリロードできます。違いが出るのはバナーです。
 
-Android は [GMA Next-Gen SDK](https://developers.google.com/admob/android/next-gen/quick-start)、iOS は Google Mobile Ads SDK v13 系を使っています。
+Android は [GMA Next-Gen SDK](https://developers.google.com/admob/android/next-gen/quick-start)、iOS は Google Mobile Ads SDK v13 系を使います。
 
 ## サポート範囲
 
-- **New Architecture 専用**です。Old Architecture は対象外です
+- **New Architecture 専用**です。Old Architecture では動きません
 - **Expo SDK 57 以降**、**iOS 16.4 以降**、**Android minSdk 24 以降**
 - バナー・インタースティシャル・リワード広告・UMP 同意管理
 
-未対応なのは、ネイティブ広告・アプリ起動時広告（App Open）・リワード広告のサーバーサイド検証です。
+ネイティブ広告、アプリ起動時広告（App Open）、リワード広告のサーバーサイド検証には対応していません。
 
 ## インストール
 
@@ -37,9 +37,9 @@ Android は [GMA Next-Gen SDK](https://developers.google.com/admob/android/next-
 npx expo install @kazutoyo/expo-google-mobile-ads
 ```
 
-ネイティブコードを含むので、**Expo Go では動きません**。development build が必要になります。
+ネイティブコードを含むため、**Expo Go では動きません**。development build が必要です。
 
-AdMob の App ID を `app.json` の config plugin に渡します。
+AdMob の App ID を、`app.json` の config plugin に渡します。
 
 ```json
 {
@@ -57,7 +57,7 @@ AdMob の App ID を `app.json` の config plugin に渡します。
 }
 ```
 
-あとは同意を取って、初期化して、広告をロードします。
+あとは同意を取得し、初期化して、広告をロードします。
 
 ```typescript
 import { gatherConsent, initialize, createBannerAd, BannerAdSize } from '@kazutoyo/expo-google-mobile-ads';
@@ -75,7 +75,7 @@ export const homeBannerAd = createBannerAd({
 <BannerAdView ad={homeBannerAd} />
 ```
 
-plugin が何を検証しているかは[インストールガイド](https://kazutoyo.github.io/expo-google-mobile-ads/ja/installation)、UMP のフロー全体は[同意管理](https://kazutoyo.github.io/expo-google-mobile-ads/ja/consent)を参照してください。
+plugin が何を検証しているかは [インストールガイド](https://kazutoyo.github.io/expo-google-mobile-ads/ja/installation)、UMP のフロー全体は [同意管理](https://kazutoyo.github.io/expo-google-mobile-ads/ja/consent) を参照してください。
 
 ## ドキュメント
 
@@ -92,7 +92,7 @@ plugin が何を検証しているかは[インストールガイド](https://ka
 
 ## 開発
 
-ドキュメントサイトは [`website/`](website) にあり、[Blume](https://useblume.dev/) で作っています。`cd website && npm install && npm run dev` で編集できます。
+ドキュメントサイトは [`website/`](website) にあります。[Blume](https://useblume.dev/) で構築しており、`cd website && npm install && npm run dev` で起動します。
 
 ## ライセンス
 
