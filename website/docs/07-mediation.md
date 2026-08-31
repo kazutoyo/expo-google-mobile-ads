@@ -3,9 +3,9 @@ title: "Mediation"
 description: "Add mediation adapters through the config plugin's dependency hooks."
 ---
 
-This library doesn't ship a version-pinned "curated list" of mediation adapters. Adapter versions change often, and pinning them here would just become stale maintenance debt. Instead, the config plugin exposes raw hooks for the dependencies, and you specify what you need yourself.
+This library doesn't ship a version-pinned list of mediation adapters. Adapter versions change often, so a list pinned here would go stale. Instead, the config plugin takes the dependencies directly, and you specify the ones you need.
 
-The example below uses AppLovin as a fully worked reference — a real, current Android artifact coordinate and iOS pod version you can copy as a starting point.
+The example below uses AppLovin. The Android artifact coordinate and the iOS pod version are both real, so you can copy them as a starting point.
 
 ```json
 {
@@ -29,16 +29,11 @@ The example below uses AppLovin as a fully worked reference — a real, current 
 }
 ```
 
-Note that the Android and iOS versions above deliberately differ. The two adapters are versioned
-independently and are frequently out of step, so **never copy one platform's number onto the
-other**. Read each from its own changelog.
+The Android and iOS versions above deliberately differ. The two adapters are versioned independently and are frequently out of step, so **never copy one platform's number onto the other**. Read each from its own changelog.
 
-**Watch for "(In progress)" when you read a changelog.** Google's adapter changelogs list the
-*next*, unreleased version at the very top, marked `(In progress)`. Taking the topmost number
-gets you a version that does not exist yet, and `pod install` / Gradle resolution fails. Take the
-first entry *below* any `(In progress)` heading.
+**Watch for `(In progress)` when you read a changelog.** Google's adapter changelogs list the *next*, unreleased version at the very top, marked `(In progress)`. Taking the topmost number gets you a version that does not exist yet, and `pod install` or Gradle resolution then fails. Take the first entry *below* any `(In progress)` heading.
 
-**Versions move — don't copy one from here and forget it.** Get the current version for any network from its changelog, linked below, at the time you add it. For the other networks, add the matching artifact id (Android) or pod name (iOS) from the table with the version the changelog currently lists.
+**Versions move. Don't copy one from here and forget it.** Get the current version from the changelog linked below at the time you add the adapter. For the other networks, use the artifact id (Android) or pod name (iOS) from the table with the version the changelog currently lists.
 
 | network | Android | iOS |
 |---|---|---|
@@ -48,4 +43,4 @@ first entry *below* any `(In progress)` heading.
 | ironSource | `com.google.ads.mediation:ironsource` ([changelog](https://developers.google.com/admob/android/mediation/ironsource)) | `GoogleMobileAdsMediationIronSource` ([changelog](https://developers.google.com/admob/ios/mediation/ironsource)) |
 | LY Ads Network (formerly LINE Ads Network) | `com.google.ads.mediation:line` ([changelog](https://developers.google.com/admob/android/mediation/line)) | `GoogleMobileAdsMediationLine` ([changelog](https://developers.google.com/admob/ios/mediation/line)) |
 
-`androidMavenRepositories` is only needed when a network requires its own Maven repository (e.g. Pangle).
+`androidMavenRepositories` is only needed when a network requires its own Maven repository (Pangle, for example).
