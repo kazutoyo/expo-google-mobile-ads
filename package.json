@@ -60,7 +60,7 @@
     "@types/node": "^26.3.0",
     "@types/react": "~19.2.4",
     "babel-preset-expo": "~57.0.9",
-    "eslint": "~10.9.1",
+    "eslint": "~9.39.4",
     "eslint-config-universe": "^16.0.0",
     "expo": "~57.0.18",
     "expo-modules-core": "~57.0.14",
