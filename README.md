@@ -12,14 +12,14 @@ An Expo Modules native wrapper for the [Google Mobile Ads (AdMob)](https://devel
 
 ## Why this library
 
-The design turns on one decision: the ad and the view that displays it are separate objects. An ad is a `SharedObject` from the Expo Modules API, so it exists without a view and starts loading the moment it is created. An ad can be ready before the screen that shows it exists.
+This library keeps the ad and the view that displays it as separate objects. An ad is a `SharedObject` from the Expo Modules API, so it exists without a view and starts loading the moment it is created. An ad can be ready before the screen that shows it exists.
 
 - **Preloadable** — `createBannerAd()` can be called outside React, before a screen transition or at app startup. Loading starts without waiting for a view (queued until `initialize()` completes), and the view is attached later.
 - **Reusable across screens** — `<BannerAdView ad={ad} />` detaches on unmount without destroying the ad, so the same instance can be shown again on another screen.
-- **Thin hooks** — `useBannerAd` / `useBannerAdState` wrap the imperative API and nothing else. When they don't fit, the layer underneath is right there.
+- **Thin hooks** — `useBannerAd` / `useBannerAdState` wrap the imperative API and nothing else. When they don't fit, you can use the layer underneath directly.
 - **No layout shift** — `BannerAdSize` computes sizes synchronously, without waiting for a load, so the display area can be reserved before the ad arrives.
 
-In `react-native-google-mobile-ads` a banner is a component — `<BannerAd unitId size />` — so a banner ad is created together with the view that displays it. Its interstitial and rewarded ads are standalone objects (`InterstitialAd.createForAdRequest()`) and preload fine; banners are where the difference shows.
+In `react-native-google-mobile-ads` a banner is a component, `<BannerAd unitId size />`, so a banner ad is created together with the view that displays it. Its interstitial and rewarded ads are standalone objects (`InterstitialAd.createForAdRequest()`) and preload fine. Banners are where the difference shows.
 
 Android uses the [GMA Next-Gen SDK](https://developers.google.com/admob/android/next-gen/quick-start); iOS uses the Google Mobile Ads SDK v13.
 
@@ -29,7 +29,7 @@ Android uses the [GMA Next-Gen SDK](https://developers.google.com/admob/android/
 - **Expo SDK 57+**, **iOS 16.4+**, **Android minSdk 24+**.
 - Banner, interstitial, rewarded ads, and UMP consent.
 
-Not yet supported: native ads, app-open ads, and server-side verification for rewarded ads.
+Native ads, app-open ads, and server-side verification for rewarded ads are not supported yet.
 
 ## Installation
 
@@ -37,7 +37,7 @@ Not yet supported: native ads, app-open ads, and server-side verification for re
 npx expo install @kazutoyo/expo-google-mobile-ads
 ```
 
-This module contains native code, so **it does not run in Expo Go** — you need a development build.
+This module contains native code, so **it does not run in Expo Go**. You need a development build.
 
 Pass your AdMob App IDs to the config plugin in `app.json`:
 
@@ -75,7 +75,7 @@ export const homeBannerAd = createBannerAd({
 <BannerAdView ad={homeBannerAd} />
 ```
 
-See the [installation guide](https://kazutoyo.github.io/expo-google-mobile-ads/installation) for what the plugin validates and why, and the [consent guide](https://kazutoyo.github.io/expo-google-mobile-ads/consent) for the UMP flow in full.
+See the [installation guide](https://kazutoyo.github.io/expo-google-mobile-ads/installation) for what the plugin validates, and the [consent guide](https://kazutoyo.github.io/expo-google-mobile-ads/consent) for the UMP flow in full.
 
 ## Documentation
 
@@ -92,7 +92,7 @@ See the [installation guide](https://kazutoyo.github.io/expo-google-mobile-ads/i
 
 ## Contributing
 
-The documentation site lives in [`website/`](website) and is built with [Blume](https://useblume.dev/). `cd website && npm install && npm run dev` to work on it.
+The documentation site lives in [`website/`](website) and is built with [Blume](https://useblume.dev/). Run `cd website && npm install && npm run dev` to work on it.
 
 ## License
 
