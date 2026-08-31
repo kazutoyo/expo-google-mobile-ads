@@ -19,7 +19,7 @@ Expo Modules ネイティブな [Google Mobile Ads (AdMob)](https://developers.g
 - **hooks が薄い** — `useBannerAd` / `useBannerAdState` は命令的な API のラッパーでしかありません。hooks で足りない場面では、下の層をそのまま触れます
 - **レイアウトシフトが起きない** — `BannerAdSize` のサイズ計算はロードを待たない同期関数です。広告が届く前に表示領域を確定できます
 
-`react-native-google-mobile-ads` は React Native の TurboModules 向けで、広告は表示する View と一体で生成されます。プリロードを前提に組みたい場合は、この違いが効いてくるかと思います。
+`react-native-google-mobile-ads` では、バナーは `<BannerAd unitId size />` というコンポーネントなので、バナー広告は表示する View と一緒に生成されます。インタースティシャルとリワードは独立したオブジェクト（`InterstitialAd.createForAdRequest()`）なのでプリロードできます。違いが出るのはバナーです。
 
 Android は [GMA Next-Gen SDK](https://developers.google.com/admob/android/next-gen/quick-start)、iOS は Google Mobile Ads SDK v13 系を使っています。
 

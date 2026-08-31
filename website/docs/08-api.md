@@ -317,7 +317,9 @@ Returns: [`RewardedAd`](#rewardedad)
 
 Initializes the Google Mobile Ads SDK. Call it once at app startup, before loading ads.
 
-**This library never initializes itself**, and the ordering against UMP consent is the app's decision. Google's own guidance on that ordering has changed over time — the older guidance put consent first because `initialize()` triggers ad preloading by mediation adapters, the current one allows initializing first since initialization processes no personal data. Auto-initializing would silently pick one of those readings on the app's behalf, with no way to override it.
+**This library never initializes itself**, and the ordering against UMP consent is the app's decision. Google's own guidance on that ordering is not settled — one reading puts consent first because `initialize()` brings up the mediation adapters, another allows initializing first on the grounds that initialization processes no personal data and policy only requires not *requesting* ads until `canRequestAds` is true. Auto-initializing would pick one of those readings on the app's behalf, with no way to override it.
+
+What matters for making that decision: **`initialize()` starts the native SDK, and its mediation adapters, immediately.** The queue described below defers ad *loads* only — it does not defer initialization. So an app that needs initialization itself to happen after consent has to order the two calls that way; gating on `canRequestAds` afterwards does not achieve it.
 
 Repeated calls return the same promise. If initialization fails, the cached promise is cleared so a later call can retry, and every ad queued behind it is told that it failed.
 
