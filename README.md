@@ -19,7 +19,7 @@ The design turns on one decision: the ad and the view that displays it are separ
 - **Thin hooks** — `useBannerAd` / `useBannerAdState` wrap the imperative API and nothing else. When they don't fit, the layer underneath is right there.
 - **No layout shift** — `BannerAdSize` computes sizes synchronously, without waiting for a load, so the display area can be reserved before the ad arrives.
 
-`react-native-google-mobile-ads` targets React Native's TurboModules, where an ad is created together with the view that displays it. If you want to preload, that is the difference that matters.
+In `react-native-google-mobile-ads` a banner is a component — `<BannerAd unitId size />` — so a banner ad is created together with the view that displays it. Its interstitial and rewarded ads are standalone objects (`InterstitialAd.createForAdRequest()`) and preload fine; banners are where the difference shows.
 
 Android uses the [GMA Next-Gen SDK](https://developers.google.com/admob/android/next-gen/quick-start); iOS uses the Google Mobile Ads SDK v13.
 
