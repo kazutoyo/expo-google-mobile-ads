@@ -2,8 +2,8 @@
   "compilerOptions": {
     "types": ["jest", "node"],
     "target": "es2019",
-    "moduleResolution": "node10",
-    "module": "commonjs",
+    "moduleResolution": "node16",
+    "module": "node16",
     "moduleDetection": "force",
     "esModuleInterop": true,
     "sourceMap": true,

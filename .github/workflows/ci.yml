@@ -38,10 +38,19 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
 
+      # Dependabot is told to leave the SDK-governed packages alone, so this is
+      # what says when they need to move. It compares against the installed
+      # Expo SDK's own list, and exits 1 on a mismatch — `npx expo install
+      # --fix` is the fix, and it moves the whole set together.
+      - name: Check the dependencies match the Expo SDK
+        run: npx expo install --check
+
       # The example resolves the library through metro to `src`, so this is what
       # catches a prop or an option that exists in the TypeScript API but was
       # never wired through to the native module.
       - run: npm ci
+        working-directory: example
+      - run: npx expo install --check
         working-directory: example
       - run: npx tsc --noEmit
         working-directory: example
