@@ -11,25 +11,31 @@ updates:
       dev-dependencies:
         dependency-type: development
     ignore:
-      # These do not move on their own — the Expo SDK decides them. `expo` and
-      # `react-native` pin the Babel and Jest majors their presets work with, so
-      # a bump here breaks the test harness rather than updating it: Babel 8
-      # fails @react-native/jest-preset's `assertVersion("^7.0.0-0")`, and Jest
-      # 30 fails in jest-expo's runtime with `clearMocksOnScope is not a
-      # function`. `npx expo install --check` raises them, at SDK upgrade time.
+      # The Expo SDK decides these, not the registry: `npx expo install --check`
+      # knows the version each one is supposed to be at, and CI runs it. What
+      # Dependabot proposes for them is the latest release, which is a different
+      # question and often the wrong answer — it offered react-native 0.87 where
+      # SDK 57 wants 0.86.3, and TypeScript 7 where it wants ~6.0.3.
+      #
+      # When the check goes red, `npx expo install --fix` moves the whole set
+      # together, which is the only way it stays consistent.
       - dependency-name: expo
       - dependency-name: expo-modules-core
       - dependency-name: react-native
       - dependency-name: react
       - dependency-name: jest-expo
       - dependency-name: babel-preset-expo
+      - dependency-name: typescript
+      - dependency-name: '@types/react'
+      # Not in the SDK's list, but pinned to it in practice: Babel 8 fails
+      # @react-native/jest-preset's `assertVersion("^7.0.0-0")`, and Jest 30
+      # fails inside jest-expo with `clearMocksOnScope is not a function`.
+      # Patches still come through.
       - dependency-name: '@babel/core'
         update-types: ['version-update:semver-major']
       - dependency-name: jest
         update-types: ['version-update:semver-major']
       - dependency-name: '@types/jest'
-        update-types: ['version-update:semver-major']
-      - dependency-name: '@types/react'
         update-types: ['version-update:semver-major']
 
   - package-ecosystem: npm
