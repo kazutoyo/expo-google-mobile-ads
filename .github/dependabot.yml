@@ -27,15 +27,17 @@ updates:
       - dependency-name: babel-preset-expo
       - dependency-name: typescript
       - dependency-name: '@types/react'
+      - dependency-name: jest
+      - dependency-name: '@types/jest'
       # Not in the SDK's list, but pinned to it in practice: Babel 8 fails
-      # @react-native/jest-preset's `assertVersion("^7.0.0-0")`, and Jest 30
-      # fails inside jest-expo with `clearMocksOnScope is not a function`.
-      # Patches still come through.
+      # @react-native/jest-preset's `assertVersion("^7.0.0-0")`. Patches still
+      # come through.
       - dependency-name: '@babel/core'
         update-types: ['version-update:semver-major']
-      - dependency-name: jest
-        update-types: ['version-update:semver-major']
-      - dependency-name: '@types/jest'
+      # eslint-config-universe 16 still bundles eslint-plugin-react and
+      # eslint-plugin-import releases that cap their peer at eslint 9; under
+      # eslint 10 the react rules crash with `getFilename is not a function`.
+      - dependency-name: eslint
         update-types: ['version-update:semver-major']
 
   - package-ecosystem: npm

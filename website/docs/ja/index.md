@@ -20,7 +20,7 @@ npx expo install @kazutoyo/expo-google-mobile-ads
 
 ## 動作要件
 
-- **Expo SDK 57 以降** — `peerDependencies` に書いているので、バージョンが合わないときはネイティブビルドを待たずに npm/yarn の時点でわかります
+- **Expo SDK 58 以降**（58.0.21 以降） — `peerDependencies` に書いているので、バージョンが合わないときはネイティブビルドを待たずに npm/yarn の時点でわかります
 - **New Architecture 専用**です。Old Architecture は対象外です
 - **iOS 16.4 以降**、**Android minSdk 24 以降**。iOS の下限は広告 SDK ではなく Expo 側の都合で、`ExpoModulesCore` が SDK 56 以降 `:ios => '16.4'` を宣言しています（広告 SDK v13 自体は iOS 13 で動きます）。アプリの `ios.deploymentTarget` がこれより低いと pod を入れられません
 

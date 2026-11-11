@@ -26,7 +26,7 @@ Android uses the [GMA Next-Gen SDK](https://developers.google.com/admob/android/
 ## Scope
 
 - **New Architecture only.** Old Architecture is not supported.
-- **Expo SDK 57+**, **iOS 16.4+**, **Android minSdk 24+**.
+- **Expo SDK 58+** (58.0.21 or later), **iOS 16.4+**, **Android minSdk 24+**.
 - Banner, interstitial, rewarded ads, and UMP consent.
 
 Not yet supported: native ads, app-open ads, and server-side verification for rewarded ads.
