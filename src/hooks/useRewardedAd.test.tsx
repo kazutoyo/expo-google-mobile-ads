@@ -25,8 +25,8 @@ jest.mock('expo-modules-core', () => ({
 }));
 jest.mock('../ExpoGoogleMobileAdsModule', () => ({
   __esModule: true,
-  default: {
-    // Gives ads created via `new NativeModule.RewardedAd(...)` (the `useRewardedAd` factory)
+  NativeObjects: {
+    // Gives ads created via `new NativeObjects.RewardedAd(...)` (the `useRewardedAd` factory)
     // the same addListener/remove shape as makeAd, since useEventListener now subscribes for
     // real.
     RewardedAd: jest.fn().mockImplementation(() => ({

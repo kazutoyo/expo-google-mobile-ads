@@ -26,7 +26,7 @@ jest.mock('expo', () => {
 });
 jest.mock('./ExpoGoogleMobileAdsModule', () => ({
   __esModule: true,
-  default: { BannerAd: jest.fn() },
+  NativeObjects: { BannerAd: jest.fn() },
 }));
 jest.mock('./initialization', () => ({ runWhenInitialized: jest.fn() }));
 
