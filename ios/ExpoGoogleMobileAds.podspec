@@ -19,7 +19,7 @@ Pod::Spec.new do |s|
   s.static_framework = true
 
   s.dependency 'ExpoModulesCore'
-  s.dependency 'Google-Mobile-Ads-SDK', '~> 13.0'
+  s.dependency 'Google-Mobile-Ads-SDK', '~> 13.12'
 
   # Swift/Objective-C compatibility
   s.pod_target_xcconfig = {
