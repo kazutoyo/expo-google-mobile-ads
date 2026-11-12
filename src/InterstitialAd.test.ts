@@ -2,7 +2,7 @@ const mockInterstitialAd = jest.fn();
 
 jest.mock('./ExpoGoogleMobileAdsModule', () => ({
   __esModule: true,
-  default: {
+  NativeObjects: {
     get InterstitialAd() {
       return mockInterstitialAd;
     },

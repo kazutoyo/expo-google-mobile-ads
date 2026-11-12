@@ -1,7 +1,6 @@
 package expo.modules.googlemobileads
 
 import android.app.Activity
-import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import com.google.android.libraries.ads.mobile.sdk.MobileAds
@@ -11,13 +10,15 @@ import com.google.android.libraries.ads.mobile.sdk.initialization.AdapterStatus
 import com.google.android.libraries.ads.mobile.sdk.initialization.InitializationConfig
 import com.google.android.ump.FormError
 import com.google.android.ump.UserMessagingPlatform
-import expo.modules.kotlin.Promise
-import expo.modules.kotlin.exception.Exceptions
-import expo.modules.kotlin.functions.Coroutine
-import expo.modules.kotlin.modules.Module
-import expo.modules.kotlin.modules.ModuleDefinition
+import io.github.expo.modules.v2.ExpoModule
+import io.github.expo.modules.v2.JS
+import io.github.expo.modules.v2.JavaScriptThrowable
+import io.github.expo.modules.v2.Module
+import io.github.expo.modules.v2.react.currentActivity
+import io.github.expo.modules.v2.react.androidContextOrNull
 import java.util.concurrent.CountDownLatch
 import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -115,323 +116,218 @@ private fun Map<String, Any?>.toRequestConfiguration(): RequestConfiguration {
 private fun AdSize.toMap(): Map<String, Any?> = mapOf("width" to width, "height" to height)
 
 /**
- * Rejects [promise] with the normalized code, or resolves it with a fresh snapshot.
- *
- * Every UMP callback on Android hands back a nullable [FormError], so this is the single place
- * that turns one into a JS rejection — the six functions below never build a rejection themselves.
- *
- * This is always called from inside a UMP listener callback, and the module's invariant is
- * "every UMP call on the main thread" — including the [consentSnapshot] read below, which touches
- * four `ConsentInformation` properties. That invariant holds here because the UMP SDK itself
- * dispatches these callbacks to the main thread, not because this function enforces it, so there
- * is no `mainHandler.post` hop: it is already on main and re-posting would only add latency.
+ * A UMP failure, or a missing Activity or context, as JS sees it: `code` is the normalized
+ * `ConsentErrorCode` string.
  */
-private fun settleConsent(promise: Promise, context: Context, error: FormError?) {
-  if (error != null) {
-    promise.reject(consentErrorCode(error.errorCode), consentErrorMessage(error), null)
-    return
-  }
-  promise.resolve(consentSnapshot(context))
-}
+private class ConsentException(override val code: String, message: String) :
+  JavaScriptThrowable(message)
 
+private fun FormError.toException() =
+  ConsentException(consentErrorCode(errorCode), consentErrorMessage(this))
+
+/**
+ * The module-level functions, on the Expo Modules API 2.0.
+ *
+ * The ad objects and the banner view live in [ExpoGoogleMobileAdsObjectsModule] instead: a 2.0
+ * module runs on a separate runtime and cannot hold any of the 1.0 DSL.
+ */
+@ExpoModule("ExpoGoogleMobileAds")
 class ExpoGoogleMobileAdsModule : Module() {
-  override fun definition() = ModuleDefinition {
-    Name("ExpoGoogleMobileAds")
-
-    AsyncFunction("initializeAsync") Coroutine { ->
-      // [Android counterpart of Lesson 1 — the reverse case] `MobileAds.initialize()` involves
-      // heavy work including network-bound adapter initialization, and calling it on the main
-      // thread risks an ANR. Unlike iOS's `MobileAds.shared.start()`, which explicitly moves to
-      // main (since it's lightweight there), Android explicitly offloads this to a background
-      // (IO) thread instead.
-      withContext(Dispatchers.IO) {
-        val context = appContext.reactContext ?: throw Exceptions.ReactContextLost()
-        val appId = AppIdProvider.get(context)
-        suspendCancellableCoroutine { continuation ->
-          MobileAds.initialize(
-            context,
-            InitializationConfig.Builder(appId).build()
-          ) { status ->
-            val adapterStatuses = status.adapterStatusMap.mapValues { (_, adapterStatus) ->
-              mapOf(
-                // The real `AdapterStatus.InitializationState` only has NOT_STARTED /
-                // INITIALIZING / COMPLETE / TIMED_OUT / FAILED — the brief's assumed READY
-                // value doesn't exist. COMPLETE is the only one that maps to "ready".
-                "state" to if (adapterStatus.initializationState ==
-                  AdapterStatus.InitializationState.COMPLETE
-                ) {
-                  "ready"
-                } else {
-                  "notReady"
-                },
-                "description" to adapterStatus.description,
-                // AdapterStatus.getLatency() is already exposed as an Int in milliseconds on
-                // Android, so unlike iOS no *1000 conversion is needed.
-                "latency" to adapterStatus.latency
-              )
-            }
-            continuation.resume(mapOf("adapterStatuses" to adapterStatuses))
+  @JS
+  suspend fun initializeAsync(): Map<String, Any?> {
+    // [Android counterpart of Lesson 1 — the reverse case] `MobileAds.initialize()` involves
+    // heavy work including network-bound adapter initialization, and calling it on the main
+    // thread risks an ANR. Unlike iOS's `MobileAds.shared.start()`, which explicitly moves to
+    // main (since it's lightweight there), Android explicitly offloads this to a background
+    // (IO) thread instead.
+    val context = androidContextOrNull ?: throw contextLost()
+    return withContext(Dispatchers.IO) {
+      val appId = AppIdProvider.get(context)
+      suspendCancellableCoroutine { continuation ->
+        MobileAds.initialize(
+          context,
+          InitializationConfig.Builder(appId).build()
+        ) { status ->
+          val adapterStatuses = status.adapterStatusMap.mapValues { (_, adapterStatus) ->
+            mapOf(
+              // The real `AdapterStatus.InitializationState` only has NOT_STARTED /
+              // INITIALIZING / COMPLETE / TIMED_OUT / FAILED — the brief's assumed READY
+              // value doesn't exist. COMPLETE is the only one that maps to "ready".
+              "state" to if (adapterStatus.initializationState ==
+                AdapterStatus.InitializationState.COMPLETE
+              ) {
+                "ready"
+              } else {
+                "notReady"
+              },
+              "description" to adapterStatus.description,
+              // AdapterStatus.getLatency() is already exposed as an Int in milliseconds on
+              // Android, so unlike iOS no *1000 conversion is needed.
+              "latency" to adapterStatus.latency
+            )
           }
+          continuation.resume(mapOf("adapterStatuses" to adapterStatuses))
         }
       }
     }
+  }
 
-    // [Review fix — I2] This used to post to main, but since `initializeAsync` calls
-    // `MobileAds.initialize()` on `Dispatchers.IO` (a different thread), there's no ordering
-    // guarantee between "posting to main" and "dispatching to IO" — two unrelated queues — so
-    // even if JS called `setRequestConfiguration()` then `initialize()` in that order, there
-    // was a race where `testDeviceIds` could end up applied after initialization (iOS's
-    // premise — "calls run FIFO on the same main queue" — doesn't hold for this Android
-    // setup). This function has no documented main-thread-only constraint and is just a plain
-    // static setter, so there's no point offloading it to a different queue either. Calling it
-    // synchronously on the JS thread guarantees that the order JS called it in is the order it
-    // executes in.
-    Function("setRequestConfiguration") { config: Map<String, Any?> ->
-      MobileAds.setRequestConfiguration(config.toRequestConfiguration())
+  // [Review fix — I2] This used to post to main, but since `initializeAsync` calls
+  // `MobileAds.initialize()` on `Dispatchers.IO` (a different thread), there's no ordering
+  // guarantee between "posting to main" and "dispatching to IO" — two unrelated queues — so
+  // even if JS called `setRequestConfiguration()` then `initialize()` in that order, there
+  // was a race where `testDeviceIds` could end up applied after initialization (iOS's
+  // premise — "calls run FIFO on the same main queue" — doesn't hold for this Android
+  // setup). This function has no documented main-thread-only constraint and is just a plain
+  // static setter, so there's no point offloading it to a different queue either. Calling it
+  // synchronously on the JS thread guarantees that the order JS called it in is the order it
+  // executes in.
+  @JS
+  fun setRequestConfiguration(config: Map<String, Any?>) {
+    MobileAds.setRequestConfiguration(config.toRequestConfiguration())
+  }
+
+  // [Review fix — M1] This used to require `appContext.currentActivity` and throw
+  // `Exceptions.MissingActivity()` if absent. But the same JS-side function is contracted to
+  // never fail on iOS, and having the same JS call throw or not depending on platform breaks
+  // that contract. In fact, none of these `AdSize` static functions require an `Activity` —
+  // just a generic `Context` (confirmed via javap) — so the correct fix is to use
+  // `appContext.reactContext` instead of `appContext.currentActivity`. `reactContext` is
+  // effectively guaranteed to exist by the time JS can call this function at all (i.e. once a
+  // React instance exists), which effectively matches iOS's "never fails" contract.
+  //
+  // Both anchored functions go through `makeAdaptiveAdSize`, the same function `BannerAd`
+  // rebuilds a size with once it has crossed the JS boundary — the size a caller lays out
+  // against and the size actually requested therefore come from the same factory call.
+  @JS
+  fun getAnchoredAdaptiveSize(width: Double, orientation: String): Map<String, Any?> =
+    runOnMain {
+      val context = androidContextOrNull ?: throw contextLost()
+      val kind = when (orientation) {
+        "portrait" -> BannerAdSizeKind.ANCHORED_PORTRAIT
+        "landscape" -> BannerAdSizeKind.ANCHORED_LANDSCAPE
+        else -> BannerAdSizeKind.ANCHORED
+      }
+      makeAdaptiveAdSize(context, kind, width.roundToInt(), 0).toMap()
     }
 
-    // [Review fix — M1] This used to require `appContext.currentActivity` and throw
-    // `Exceptions.MissingActivity()` if absent. But the same JS-side function is contracted to
-    // never fail on iOS, and having the same JS call throw or not depending on platform breaks
-    // that contract. In fact, none of these `AdSize` static functions require an `Activity` —
-    // just a generic `Context` (confirmed via javap) — so the correct fix is to use
-    // `appContext.reactContext` instead of `appContext.currentActivity`. `reactContext` is
-    // effectively guaranteed to exist by the time JS can call this function at all (i.e. once a
-    // React instance exists), which effectively matches iOS's "never fails" contract.
-    //
-    // Both anchored functions go through `makeAdaptiveAdSize`, the same function `BannerAd`
-    // rebuilds a size with once it has crossed the JS boundary — the size a caller lays out
-    // against and the size actually requested therefore come from the same factory call.
-    Function("getAnchoredAdaptiveSize") { width: Double, orientation: String ->
-      runOnMain {
-        val context = appContext.reactContext ?: throw Exceptions.ReactContextLost()
-        val kind = when (orientation) {
-          "portrait" -> BannerAdSizeKind.ANCHORED_PORTRAIT
-          "landscape" -> BannerAdSizeKind.ANCHORED_LANDSCAPE
-          else -> BannerAdSizeKind.ANCHORED
-        }
-        makeAdaptiveAdSize(context, kind, width.roundToInt(), 0).toMap()
+  @JS
+  fun getLargeAnchoredAdaptiveSize(width: Double, orientation: String): Map<String, Any?> =
+    runOnMain {
+      val context = androidContextOrNull ?: throw contextLost()
+      val kind = when (orientation) {
+        "portrait" -> BannerAdSizeKind.LARGE_ANCHORED_PORTRAIT
+        "landscape" -> BannerAdSizeKind.LARGE_ANCHORED_LANDSCAPE
+        else -> BannerAdSizeKind.LARGE_ANCHORED
       }
+      makeAdaptiveAdSize(context, kind, width.roundToInt(), 0).toMap()
     }
 
-    Function("getLargeAnchoredAdaptiveSize") { width: Double, orientation: String ->
-      runOnMain {
-        val context = appContext.reactContext ?: throw Exceptions.ReactContextLost()
-        val kind = when (orientation) {
-          "portrait" -> BannerAdSizeKind.LARGE_ANCHORED_PORTRAIT
-          "landscape" -> BannerAdSizeKind.LARGE_ANCHORED_LANDSCAPE
-          else -> BannerAdSizeKind.LARGE_ANCHORED
-        }
-        makeAdaptiveAdSize(context, kind, width.roundToInt(), 0).toMap()
-      }
+  // Only the max-height form is exposed. The per-orientation helpers are, per the AAR's own
+  // bytecode, nothing but `getInlineAdaptiveBannerAdSize(width, <device height in dp>)` — a
+  // ~923dp max height on a Pixel 9a, which is not a height a caller can reserve space for.
+  // iOS cannot express that form as `{width, height}` at all. See `inlineAdaptive()` in
+  // BannerAdSize.ts.
+  //
+  // `getInlineAdaptiveBannerAdSize(width, maxHeight)` is a static calculation needing no
+  // Context, and no longer reads any UI state, so it does not need `runOnMain` either.
+  @JS
+  fun getInlineAdaptiveSize(width: Double, maxHeight: Double): Map<String, Any?> =
+    AdSize.getInlineAdaptiveBannerAdSize(width.roundToInt(), maxHeight.roundToInt()).toMap()
+
+  // MARK: - UMP consent
+  //
+  // Every one of these resolves an Activity at call time and never caches it: at preload there
+  // may be none at all. When there is none the call rejects with `noActivity` rather than
+  // failing silently — the same trap phase 1 hit with `BannerAd.load()`.
+  //
+  // All of them run on `Dispatchers.Main`: UMP's consent calls are main-thread-only on Android.
+  // The UMP SDK calls its listeners on the main thread too, so the snapshot read after each
+  // callback stays on main.
+
+  @JS
+  suspend fun gatherConsentAsync(options: Map<String, Any?>?): Map<String, Any?> =
+    withConsentActivity { activity ->
+      // Composed here rather than in JS so nothing can interleave between the update and the
+      // form, and so the Activity is resolved once instead of twice.
+      requestInfoUpdate(activity, options)
+      awaitFormError { UserMessagingPlatform.loadAndShowConsentFormIfRequired(activity, it) }
     }
 
-    // Only the max-height form is exposed. The per-orientation helpers are, per the AAR's own
-    // bytecode, nothing but `getInlineAdaptiveBannerAdSize(width, <device height in dp>)` — a
-    // ~923dp max height on a Pixel 9a, which is not a height a caller can reserve space for.
-    // iOS cannot express that form as `{width, height}` at all. See `inlineAdaptive()` in
-    // BannerAdSize.ts.
-    //
-    // `getInlineAdaptiveBannerAdSize(width, maxHeight)` is a static calculation needing no
-    // Context, and no longer reads any UI state, so it does not need `runOnMain` either.
-    Function("getInlineAdaptiveSize") { width: Double, maxHeight: Double ->
-      AdSize.getInlineAdaptiveBannerAdSize(width.roundToInt(), maxHeight.roundToInt()).toMap()
+  @JS
+  suspend fun requestConsentInfoUpdateAsync(options: Map<String, Any?>?): Map<String, Any?> =
+    withConsentActivity { activity -> requestInfoUpdate(activity, options) }
+
+  @JS
+  suspend fun showConsentFormIfRequiredAsync(): Map<String, Any?> =
+    withConsentActivity { activity ->
+      awaitFormError { UserMessagingPlatform.loadAndShowConsentFormIfRequired(activity, it) }
     }
 
-    // MARK: - UMP consent
-    //
-    // Every one of these resolves an Activity at call time and never caches it: at preload there
-    // may be none at all. When there is none the call rejects with `noActivity` rather than
-    // failing silently — the same trap phase 1 hit with `BannerAd.load()`.
-    //
-    // All of them run on `Dispatchers.Main`: UMP's consent calls are main-thread-only on Android
-    // as well, and `Coroutine` would otherwise run them on a background dispatcher.
-
-    AsyncFunction("gatherConsentAsync") { options: Map<String, Any?>?, promise: Promise ->
-      withMainConsentActivity(promise) { activity ->
-        val info = consentInformation(activity)
-        info.requestConsentInfoUpdate(
-          activity,
-          makeConsentRequestParameters(activity, options),
-          {
-            // Composed here rather than in JS so nothing can interleave between the update and
-            // the form, and so the Activity is resolved once instead of twice.
-            UserMessagingPlatform.loadAndShowConsentFormIfRequired(activity) { formError ->
-              settleConsent(promise, activity, formError)
-            }
-          },
-          { requestError -> settleConsent(promise, activity, requestError) }
-        )
-      }
+  @JS
+  suspend fun showPrivacyOptionsFormAsync(): Map<String, Any?> =
+    withConsentActivity { activity ->
+      awaitFormError { UserMessagingPlatform.showPrivacyOptionsForm(activity, it) }
     }
 
-    AsyncFunction("requestConsentInfoUpdateAsync") { options: Map<String, Any?>?, promise: Promise ->
-      withMainConsentActivity(promise) { activity ->
-        consentInformation(activity).requestConsentInfoUpdate(
-          activity,
-          makeConsentRequestParameters(activity, options),
-          { settleConsent(promise, activity, null) },
-          { requestError -> settleConsent(promise, activity, requestError) }
-        )
-      }
-    }
+  // Reading consent state needs only a Context, not an Activity, so this one never produces
+  // `noActivity`. It stays async because iOS's equivalent is main-thread-only.
+  @JS
+  suspend fun getConsentInfoAsync(): Map<String, Any?> {
+    val context = androidContextOrNull ?: throw contextLost()
+    return withContext(Dispatchers.Main) { consentSnapshot(context) }
+  }
 
-    AsyncFunction("showConsentFormIfRequiredAsync") { promise: Promise ->
-      withMainConsentActivity(promise) { activity ->
-        UserMessagingPlatform.loadAndShowConsentFormIfRequired(activity) { formError ->
-          settleConsent(promise, activity, formError)
-        }
-      }
-    }
-
-    AsyncFunction("showPrivacyOptionsFormAsync") { promise: Promise ->
-      withMainConsentActivity(promise) { activity ->
-        UserMessagingPlatform.showPrivacyOptionsForm(activity) { formError ->
-          settleConsent(promise, activity, formError)
-        }
-      }
-    }
-
-    // Reading consent state needs only a Context, not an Activity, so this one never produces
-    // `noActivity`. It stays async because iOS's equivalent is main-thread-only.
-    AsyncFunction("getConsentInfoAsync") { promise: Promise ->
-      withMainConsentContext(promise) { context ->
-        promise.resolve(consentSnapshot(context))
-      }
-    }
-
-    AsyncFunction("resetConsentAsync") { promise: Promise ->
-      withMainConsentContext(promise) { context ->
-        consentInformation(context).reset()
-        promise.resolve(consentSnapshot(context))
-      }
-    }
-
-    Class(BannerAd::class) {
-      Constructor { adUnitId: String, size: Map<String, Any?>, requestOptions: Map<String, Any?>? ->
-        val width = (size["width"] as? Number)?.toInt() ?: throw InvalidBannerSizeException()
-        val height = (size["height"] as? Number)?.toInt() ?: throw InvalidBannerSizeException()
-        // Only a kind the native side actually understands is kept, so `ad.size` can never
-        // report a marker that would be ignored when the size is rebuilt. The `AdSize` itself is
-        // built lazily on the main thread inside BannerAd.load() — see `BannerAd.adSize`.
-        val adaptiveKind = BannerAdSizeKind.fromJsValue(size["adaptiveKind"] as? String)
-        // [Android counterpart of Lesson 4] Deliberately doesn't resolve or require an
-        // Activity here. The Constructor must succeed even during preload, when no Activity
-        // exists yet. Activity resolution happens on every call to BannerAd.load()/ensureAdView().
-        BannerAd(appContext, adUnitId, width, height, adaptiveKind, requestOptions)
-      }
-
-      Property("size") { ad: BannerAd -> ad.requestedSizeMap }
-      Property("status") { ad: BannerAd -> ad.status }
-      Property("error") { ad: BannerAd -> ad.error }
-      Property("loadedSize") { ad: BannerAd -> ad.loadedSize }
-      Property("responseInfo") { ad: BannerAd -> ad.responseInfo }
-
-      Function("load") { ad: BannerAd -> ad.load() }
-      // @internal, called only by the JS side's deferred-load helper when initialize() fails.
-      Function("markLoadFailed") { ad: BannerAd, message: String -> ad.markLoadFailed(message) }
-
-      Events("statusChange", "impression", "clicked", "paid")
-    }
-
-    // Full-screen ads have no view: they are constructed, load immediately, and are presented
-    // later with showAsync(). Single-use — after presentation `status` is "shown" and stays there.
-    // The `notLoaded` / `alreadyShown` guards live in JS (`assertShowable`) and are deliberately
-    // not repeated here: Android has no readiness API at all, so module-side state is the only
-    // thing that can make the two platforms agree.
-    Class(InterstitialAd::class) {
-      Constructor { adUnitId: String, requestOptions: Map<String, Any?>? ->
-        // Deliberately resolves no Activity here — the Constructor must succeed during preload,
-        // when there may be none. It is resolved on every showAsync() instead.
-        InterstitialAd(appContext, adUnitId, requestOptions)
-      }
-
-      Property("status") { ad: InterstitialAd -> ad.status }
-      Property("error") { ad: InterstitialAd -> ad.error }
-      Property("responseInfo") { ad: InterstitialAd -> ad.responseInfo }
-
-      Function("load") { ad: InterstitialAd -> ad.load() }
-      // @internal, called only by the JS side's deferred-load helper when initialize() fails.
-      Function("markLoadFailed") { ad: InterstitialAd, message: String -> ad.markLoadFailed(message) }
-      AsyncFunction("showAsync") { ad: InterstitialAd, promise: Promise -> ad.showAsync(promise) }
-
-      Events("statusChange", "showed", "dismissed", "impression", "clicked", "paid")
-    }
-
-    Class(RewardedAd::class) {
-      Constructor { adUnitId: String, requestOptions: Map<String, Any?>? ->
-        RewardedAd(appContext, adUnitId, requestOptions)
-      }
-
-      Property("status") { ad: RewardedAd -> ad.status }
-      Property("error") { ad: RewardedAd -> ad.error }
-      Property("responseInfo") { ad: RewardedAd -> ad.responseInfo }
-      // What the ad offers, readable before it is shown. Not evidence that anything was earned —
-      // only show()'s resolved value says that.
-      Property("reward") { ad: RewardedAd -> ad.reward }
-
-      Function("load") { ad: RewardedAd -> ad.load() }
-      Function("markLoadFailed") { ad: RewardedAd, message: String -> ad.markLoadFailed(message) }
-      AsyncFunction("showAsync") { ad: RewardedAd, promise: Promise -> ad.showAsync(promise) }
-
-      Events("statusChange", "showed", "dismissed", "impression", "clicked", "paid", "earnedReward")
-    }
-
-    View(BannerAdView::class) {
-      Prop("ad") { view: BannerAdView, ad: BannerAd? ->
-        view.setAd(ad)
-      }
-
-      // [Review fix round 3 — item 3] `OnViewDestroys` is the real teardown hook, called from
-      // `onDropViewInstance` only when React Native has decided it will really never use this
-      // View instance again (unlike `onDetachedFromWindow`, it does not fire on
-      // react-native-screens's temporary screen detaches). Calling `detachIfOwned()` here
-      // actually removeViews the AdView (i.e. reliably nulls `View.mParent`), giving up
-      // ownership at a deterministic time rather than leaving it to GC — replacing the
-      // window-detach teardown that C3 correctly removed.
-      OnViewDestroys { view: BannerAdView ->
-        view.onDestroy()
-      }
+  @JS
+  suspend fun resetConsentAsync(): Map<String, Any?> {
+    val context = androidContextOrNull ?: throw contextLost()
+    return withContext(Dispatchers.Main) {
+      consentInformation(context).reset()
+      consentSnapshot(context)
     }
   }
 
   /**
-   * Resolves the current Activity on the main thread and runs [block] with it, rejecting
-   * [promise] with `noActivity` if there is none.
+   * Resolves the current Activity on the main thread, runs [block] with it and returns the
+   * consent snapshot. Throws `noActivity` if there is none.
    *
    * Resolved on every call, never cached: a consent call can arrive at app startup before any
    * Activity exists, which is the same condition phase 1 hit when a banner was preloaded.
    */
-  private fun withMainConsentActivity(promise: Promise, block: (Activity) -> Unit) {
-    mainHandler.post {
-      val activity = appContext.currentActivity
-      if (activity == null) {
-        promise.reject(
-          "noActivity",
-          "No Activity is in the foreground, so the consent SDK cannot be called. " +
-            "Call this once the app has a screen on display.",
-          null
-        )
-        return@post
-      }
-      block(activity)
-    }
+  private suspend fun withConsentActivity(
+    block: suspend (Activity) -> Unit
+  ): Map<String, Any?> = withContext(Dispatchers.Main) {
+    // `currentActivity` is a Java getter, so it can be null despite its platform type.
+    val activity: Activity = (currentActivity as Activity?) ?: throw ConsentException(
+      "noActivity",
+      "No Activity is in the foreground, so the consent SDK cannot be called. " +
+        "Call this once the app has a screen on display."
+    )
+    block(activity)
+    consentSnapshot(activity)
   }
 
-  /**
-   * Resolves the React context and runs [block] with it on the main thread, rejecting [promise]
-   * with `internal` if the context is already gone.
-   *
-   * Unlike [withMainConsentActivity], a missing [Context] is not a normal "not ready yet" state
-   * (a `Context` outlives any single `Activity`), so it is checked before hopping to main rather
-   * than inside the posted block — no point scheduling work for a promise already dead.
-   */
-  private fun withMainConsentContext(promise: Promise, block: (Context) -> Unit) {
-    val context = appContext.reactContext
-    if (context == null) {
-      promise.reject("internal", "The React context is gone.", null)
-      return
+  private suspend fun requestInfoUpdate(activity: Activity, options: Map<String, Any?>?) =
+    suspendCancellableCoroutine { continuation ->
+      consentInformation(activity).requestConsentInfoUpdate(
+        activity,
+        makeConsentRequestParameters(activity, options),
+        { continuation.resume(Unit) },
+        { error -> continuation.resumeWithException(error.toException()) }
+      )
     }
-    mainHandler.post { block(context) }
-  }
+
+  /** Runs a UMP call whose listener reports a nullable [FormError], and throws if it is set. */
+  private suspend fun awaitFormError(call: ((FormError?) -> Unit) -> Unit) =
+    suspendCancellableCoroutine { continuation ->
+      call { error ->
+        if (error != null) {
+          continuation.resumeWithException(error.toException())
+        } else {
+          continuation.resume(Unit)
+        }
+      }
+    }
+
+  private fun contextLost() = ConsentException("internal", "The React context is gone.")
 }

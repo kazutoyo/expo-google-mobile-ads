@@ -1,10 +1,10 @@
 import { createBannerAd } from './BannerAd';
-import NativeModule from './ExpoGoogleMobileAdsModule';
+import { NativeObjects } from './ExpoGoogleMobileAdsModule';
 import { runWhenInitialized } from './initialization';
 
 jest.mock('./ExpoGoogleMobileAdsModule', () => ({
   __esModule: true,
-  default: { BannerAd: jest.fn() },
+  NativeObjects: { BannerAd: jest.fn() },
 }));
 
 jest.mock('./initialization', () => ({
@@ -15,7 +15,7 @@ jest.mock('./initialization', () => ({
 // so a jest.fn() declared before jest.mock() would be captured as `undefined`
 // inside the factory. Define the mock inline in the factory instead, and
 // grab the reference afterwards (same pattern as BannerAdSize.test.ts).
-const mockNativeBannerAd = NativeModule.BannerAd as jest.Mock;
+const mockNativeBannerAd = NativeObjects.BannerAd as jest.Mock;
 const mockRunWhenInitialized = runWhenInitialized as jest.Mock;
 const size = { width: 360, height: 50 };
 

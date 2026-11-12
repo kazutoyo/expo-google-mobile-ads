@@ -2,7 +2,7 @@ const mockRewardedAd = jest.fn();
 
 jest.mock('./ExpoGoogleMobileAdsModule', () => ({
   __esModule: true,
-  default: {
+  NativeObjects: {
     get RewardedAd() {
       return mockRewardedAd;
     },

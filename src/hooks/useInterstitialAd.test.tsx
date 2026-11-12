@@ -25,8 +25,8 @@ jest.mock('expo-modules-core', () => ({
 }));
 jest.mock('../ExpoGoogleMobileAdsModule', () => ({
   __esModule: true,
-  default: {
-    // Gives ads created via `new NativeModule.InterstitialAd(...)` (the `useInterstitialAd`
+  NativeObjects: {
+    // Gives ads created via `new NativeObjects.InterstitialAd(...)` (the `useInterstitialAd`
     // factory) the same addListener/remove shape as makeAd, since useEventListener now
     // subscribes for real.
     InterstitialAd: jest.fn().mockImplementation(() => ({

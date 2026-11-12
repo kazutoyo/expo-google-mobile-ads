@@ -20,7 +20,7 @@ Not supported: native ads, app-open ads, and server-side verification for reward
 
 ## Requirements
 
-- **Expo SDK 57+** — declared as a `peerDependencies` constraint, so a mismatched version surfaces at install time instead of failing later in the native build.
+- **Expo SDK 58+** (58.0.21 or later) — declared as a `peerDependencies` constraint, so a mismatched version surfaces at install time instead of failing later in the native build.
 - **New Architecture only.** Old Architecture is not supported.
 - **iOS 16.4+**, **Android minSdk 24+**. The iOS floor comes from Expo itself — `ExpoModulesCore` declares `:ios => '16.4'` from SDK 56 on — not from the ads SDK, which only needs iOS 13. An app whose `ios.deploymentTarget` is lower cannot install this pod.
 

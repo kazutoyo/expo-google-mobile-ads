@@ -1,6 +1,6 @@
 import type { SharedObject } from 'expo-modules-core/types';
 
-import NativeModule from './ExpoGoogleMobileAdsModule';
+import { NativeObjects } from './ExpoGoogleMobileAdsModule';
 import {
   ShowAdError,
   assertShowable,
@@ -67,7 +67,7 @@ export function attachShow(ad: NativeInterstitialAd): InterstitialAd {
  * Create a new one for the next impression.
  */
 export function createInterstitialAd(options: FullScreenAdOptions): InterstitialAd {
-  const ad: NativeInterstitialAd = new NativeModule.InterstitialAd(
+  const ad: NativeInterstitialAd = new NativeObjects.InterstitialAd(
     options.adUnitId,
     options.requestOptions
   );
