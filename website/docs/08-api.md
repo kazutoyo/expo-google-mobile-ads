@@ -17,7 +17,7 @@ Type: `React.FC<BannerAdViewProps>`
 
 Displays a banner ad. Attaches the native view on mount and detaches it on unmount **without destroying the ad**, so the same ad can be shown again on another screen.
 
-The view sizes itself from `ad.loadedSize` once the ad has loaded, and from `ad.size` before that — so the space is reserved at the requested size and only corrects itself if the served ad came back a different size. It subscribes to the ad directly, so a preloaded ad rendered without any hook still re-renders when it loads.
+The view sizes itself from `ad.size` before the ad has loaded, and from `ad.loadedSize` afterwards. The space is reserved at the requested size and only corrects itself if the served ad came back a different size. The view subscribes to the ad directly, so a preloaded ad rendered without any hook still re-renders when it loads.
 
 A released ad renders as a zero-sized box rather than throwing.
 
@@ -60,7 +60,7 @@ Returns: [`BannerAdState`](#banneradstate)
 | --- | --- |
 | `spec` | [`BannerAdSizeSpec`](#banneradsizespec) |
 
-Recomputes an adaptive size when the screen width or orientation changes. Use it whenever `spec.orientation` is `'current'`, since the height an anchored adaptive size resolves to differs between portrait and landscape.
+Recomputes an adaptive size when the screen width or orientation changes. Use it whenever `spec.orientation` is `'current'`, because an anchored adaptive size resolves to a different height in portrait and landscape.
 
 Returns: [`BannerAdSize`](#banneradsize-1)
 
@@ -102,7 +102,7 @@ Returns: [`FullScreenAdState`](#fullscreenadstate) `& { ad: `[`RewardedAd`](#rew
 
 Subscribes to a rewarded ad the caller already owns. Neither creates nor releases it.
 
-Reports load state only. What the ad offers is on [`ad.reward`](#rewardedad), and whether the user actually earned it comes solely from what `show()` resolves with — keeping those apart is what stops a reward being granted to someone who dismissed the ad.
+Reports load state only. What the ad offers is on [`ad.reward`](#rewardedad), and whether the user actually earned it comes solely from what `show()` resolves with. Keeping those apart is what stops a reward being granted to someone who dismissed the ad.
 
 Returns: [`FullScreenAdState`](#fullscreenadstate)
 
@@ -112,7 +112,9 @@ Subscribes to the consent information the SDK last reported.
 
 **Read-only** — calling it requests nothing. Until something calls [`gatherConsent()`](#gatherconsentoptions) or one of the other consent functions, every field holds its "nothing known yet" value.
 
-It does **not** hydrate from the SDK's persisted consent on mount. After an app restart it reports `status: 'unknown'` and `canRequestAds: false` even though the native SDK still holds `'obtained'`. A settings screen that decides whether to show a privacy-options button from this hook alone will therefore show nothing after a restart, unless the app already called a consent function during that launch.
+It does **not** hydrate from the SDK's persisted consent on mount. After an app restart it reports `status: 'unknown'` and `canRequestAds: false`, even though the native SDK still holds `'obtained'`.
+
+A settings screen that decides whether to show a privacy-options button from this hook alone will therefore show nothing after a restart, unless the app already called a consent function during that launch.
 
 Returns: [`ConsentInfo`](#consentinfo)
 
@@ -146,7 +148,7 @@ A banner ad. Created by [`createBannerAd()`](#createbanneradoptions) or [`useBan
 
 Type: Class extends `SharedObject<`[`FullScreenAdEvents`](#fullscreenadevents)`>`
 
-A full-screen interstitial ad. **Single-use**: after `show()`, `status` is `'shown'`, which is terminal — `load()` does nothing from there, and both platform SDKs reject a reuse independently (iOS `AdAlreadyUsed`, Android `AD_REUSED`). Create a new ad for the next impression.
+A full-screen interstitial ad. **Single-use**: after `show()`, `status` is `'shown'`, which is terminal. `load()` does nothing from there, and both platform SDKs reject a reuse independently (iOS `AdAlreadyUsed`, Android `AD_REUSED`). Create a new ad for the next impression.
 
 #### Properties
 
@@ -160,7 +162,7 @@ A full-screen interstitial ad. **Single-use**: after `show()`, `status` is `'sho
 
 | Method | Returns | Description |
 | --- | --- | --- |
-| `show()` | `Promise<void>` | Presents the ad, resolving when the user dismisses it. Rejects with a [`ShowAdError`](#showaderror). It deliberately does **not** wait for an ad that is still loading — check `isLoaded` and skip the ad instead. |
+| `show()` | `Promise<void>` | Presents the ad, resolving when the user dismisses it. Rejects with a [`ShowAdError`](#showaderror). It deliberately does **not** wait for an ad that is still loading. Check `isLoaded` and skip the ad instead. |
 | `load()` | `void` | Requests the ad again. Does nothing once `status` is `'shown'`. |
 | `release()` | `void` | Destroys the native ad. |
 | `addListener(event, listener)` | `EventSubscription` | Subscribes to one of the [`FullScreenAdEvents`](#fullscreenadevents). |
@@ -175,7 +177,7 @@ A full-screen rewarded ad. Single-use in the same way as [`InterstitialAd`](#int
 
 | Property | Type | Description |
 | --- | --- | --- |
-| `reward` (optional) | [`AdReward`](#adreward) | Read only. What this ad **offers**, readable as soon as it loads so a prompt can tell the user what they stand to get. **Not evidence the reward was earned** — on iOS it is populated before the ad is ever presented, so treating its presence as "the user watched the ad" would grant the reward to someone who dismissed it immediately. |
+| `reward` (optional) | [`AdReward`](#adreward) | Read only. What this ad **offers**, readable as soon as it loads so a prompt can tell the user what they stand to get. **Not evidence the reward was earned.** On iOS it is populated before the ad is ever presented, so treating its presence as "the user watched the ad" would grant the reward to someone who dismissed it immediately. |
 | `status` | [`FullScreenAdStatus`](#fullscreenadstatus) | Read only. |
 | `error` (optional) | [`AdError`](#aderror) | Read only. |
 | `responseInfo` (optional) | [`ResponseInfo`](#responseinfo) | Read only. |
@@ -184,7 +186,7 @@ A full-screen rewarded ad. Single-use in the same way as [`InterstitialAd`](#int
 
 | Method | Returns | Description |
 | --- | --- | --- |
-| `show()` | `Promise<`[`AdReward`](#adreward)` \| null>` | Presents the ad. Resolves with the reward the user earned, or `null` if they dismissed it without earning one. **This resolved value is the only source of truth for whether a reward was earned** — grant it here, never from `ad.reward`. Rejects with a [`ShowAdError`](#showaderror). |
+| `show()` | `Promise<`[`AdReward`](#adreward)` \| null>` | Presents the ad. Resolves with the reward the user earned, or `null` if they dismissed it without earning one. **This resolved value is the only source of truth for whether a reward was earned.** Grant it here, never from `ad.reward`. Rejects with a [`ShowAdError`](#showaderror). |
 | `load()` | `void` | Requests the ad again. Does nothing once `status` is `'shown'`. |
 | `release()` | `void` | Destroys the native ad. |
 | `addListener(event, listener)` | `EventSubscription` | Subscribes to one of the [`RewardedAdEvents`](#rewardedadevents). |
@@ -198,7 +200,7 @@ Thrown by `show()` on a full-screen ad.
 | Property | Type | Description |
 | --- | --- | --- |
 | `code` | [`ShowAdErrorCode`](#showaderrorcode) | Which of the three failures happened. |
-| `cause` (optional) | `unknown` | For `failedToShow`, the error the native side rejected with. Keeps programmatic access to the SDK's own error — telling iOS's `AdAlreadyUsed` apart from a genuine presentation failure, for example. |
+| `cause` (optional) | `unknown` | For `failedToShow`, the error the native side rejected with. Keeps programmatic access to the SDK's own error, for telling iOS's `AdAlreadyUsed` apart from a genuine presentation failure. |
 
 ### `ConsentError`
 
@@ -237,7 +239,7 @@ An object holding the fixed sizes and the adaptive size helpers.
 
 An anchored adaptive size, 50–90dp tall. Synchronous — it resolves without waiting for a load, so the display area can be reserved ahead of time.
 
-The underlying native API is **deprecated on both platforms** and may be removed in a future SDK major version. It is kept because its shorter height has less impact on layout than `largeAnchoredAdaptive`, and it is deliberately not marked `@deprecated` in TypeScript so that using it on purpose does not produce a warning.
+The underlying native API is **deprecated on both platforms** and may be removed in a future SDK major version. It is kept because its shorter height has less impact on layout than `largeAnchoredAdaptive`. It is deliberately not marked `@deprecated` in TypeScript, so using it on purpose does not produce a warning.
 
 Returns: [`BannerAdSize`](#banneradsize-1)
 
@@ -261,7 +263,7 @@ An inline adaptive size for placement inside scrollable content, up to `options.
 
 The returned `height` is a **maximum**, not the final height — the served ad may come back shorter, and `ad.loadedSize` reports what actually arrived.
 
-`maxHeight` is required and has no default. Each SDK's "no maximum height" helper returns a value nobody can reserve layout for: iOS returns a height of `0` as a sentinel, Android the full screen height. Any default this function picked would be an arbitrary layout reservation the caller never asked for.
+`maxHeight` is required and has no default. Each SDK's "no maximum height" helper returns a value nobody can reserve layout for: iOS returns a height of `0` as a sentinel, Android the full screen height. Any default this function picked would reserve layout the caller never asked for.
 
 There is no `orientation` option either — unlike the anchored sizes, the max-height form of inline adaptive is orientation-independent on both platforms.
 
@@ -285,7 +287,7 @@ Returns: [`BannerAdSize`](#banneradsize-1)
 | --- | --- |
 | `options` | [`BannerAdOptions`](#banneradoptions) |
 
-Creates a banner ad and starts loading it. No view is involved, so this can be called outside React — at module scope, at app startup, or before a screen transition.
+Creates a banner ad and starts loading it. No view is involved, so this can be called outside React: at module scope, at app startup, or before a screen transition.
 
 If the SDK has not finished initializing, the load is queued until it has. If initialization fails, the ad moves to `status: 'error'` rather than waiting forever.
 
@@ -317,9 +319,11 @@ Returns: [`RewardedAd`](#rewardedad)
 
 Initializes the Google Mobile Ads SDK. Call it once at app startup, before loading ads.
 
-**This library never initializes itself**, and the ordering against UMP consent is the app's decision. Google's own guidance on that ordering is not settled — one reading puts consent first because `initialize()` brings up the mediation adapters, another allows initializing first on the grounds that initialization processes no personal data and policy only requires not *requesting* ads until `canRequestAds` is true. Auto-initializing would pick one of those readings on the app's behalf, with no way to override it.
+**This library never initializes itself**, and the ordering against UMP consent is the app's decision.
 
-What matters for making that decision: **`initialize()` starts the native SDK, and its mediation adapters, immediately.** The queue described below defers ad *loads* only — it does not defer initialization. So an app that needs initialization itself to happen after consent has to order the two calls that way; gating on `canRequestAds` afterwards does not achieve it.
+Google's own guidance on that ordering is not settled. One reading puts consent first, because `initialize()` brings up the mediation adapters. Another allows initializing first, on the grounds that initialization processes no personal data and that policy only requires not *requesting* ads until `canRequestAds` is true. Auto-initializing would pick one of those readings on the app's behalf, with no way to override it.
+
+One thing matters for making that decision: **`initialize()` starts the native SDK, and its mediation adapters, immediately.** The queue described below defers ad *loads* only, not initialization. An app that needs initialization itself to happen after consent has to order the two calls that way. Gating on `canRequestAds` afterwards does not achieve it.
 
 Repeated calls return the same promise. If initialization fails, the cached promise is cleared so a later call can retry, and every ad queued behind it is told that it failed.
 
@@ -377,7 +381,7 @@ Returns: `Promise<`[`ConsentInfo`](#consentinfo)`>`
 
 Erases the stored consent so the form can be shown again.
 
-**Development builds only** — a no-op when `__DEV__` is false. It is also what makes a device re-testable at all: the SDK persists consent, so without it a device can be walked through the flow once and then never shows the form again short of reinstalling the app.
+**Development builds only**: a no-op when `__DEV__` is false. It is also what makes a device re-testable at all. The SDK persists consent, so without it a device can be walked through the flow once and then never shows the form again short of reinstalling the app.
 
 Returns: `Promise<`[`ConsentInfo`](#consentinfo)`>`
 
@@ -424,9 +428,11 @@ Literal type: `'anchored' \| 'anchoredPortrait' \| 'anchoredLandscape' \| 'large
 
 Marks a size as adaptive, and which family it belongs to.
 
-Both native SDKs represent "adaptive" as a flag on their ad-size type — `GADAdSize.flags` on iOS, `AdSize.isAnchoredAdaptiveBanner` / `isInlineAdaptiveBanner` / `isLargeAnchoredAdaptiveBanner` on Android — rather than as a width and height, so it cannot be recovered from the two numbers alone. **This is why an adaptive size must be passed around whole**: rebuilding one from its `width` and `height` drops the marker, and the native side then requests a fixed banner of exactly that height, with no error to notice.
+Both native SDKs represent "adaptive" as a flag on their ad-size type, not as a width and height: `GADAdSize.flags` on iOS, and `AdSize.isAnchoredAdaptiveBanner` / `isInlineAdaptiveBanner` / `isLargeAnchoredAdaptiveBanner` on Android. It cannot be recovered from the two numbers alone.
 
-Orientation is folded into the marker rather than kept separately, because the anchored sizes genuinely differ by orientation — measured on device, `largeAnchored` is 338×106 where `largeAnchoredLandscape` is 338×80.
+**This is why an adaptive size must be passed around whole.** Rebuilding one from its `width` and `height` drops the marker, and the native side then requests a fixed banner of exactly that height, with no error to notice.
+
+Orientation is folded into the marker rather than kept separately, because the anchored sizes genuinely differ by orientation. Measured on device, `largeAnchored` is 338×106 where `largeAnchoredLandscape` is 338×80.
 
 ### `BannerAdEvents`
 
@@ -501,7 +507,7 @@ Android's UMP has no equivalent of `misconfiguration` or `formUnavailable` and r
 | Property | Type | Description |
 | --- | --- | --- |
 | `status` | [`ConsentStatus`](#consentstatus) | UMP's own consent status. |
-| `canRequestAds` | `boolean` | Whether ads may be requested right now. **Gate on this, not `status`** — it is already `true` for a user whose consent is not required at all, and for one who consented only to the minimum needed to serve ads. |
+| `canRequestAds` | `boolean` | Whether ads may be requested right now. **Gate on this, not `status`.** It is already `true` for a user whose consent is not required at all, and for one who consented only to the minimum needed to serve ads. |
 | `isConsentFormAvailable` | `boolean` | Whether a form can currently be shown. iOS reports three values (`UMPFormStatus`) and Android only a boolean, so this is narrowed to the boolean both can produce; iOS's `unknown` becomes `false`. Nothing an app can do differs between "unknown" and "unavailable". |
 | `privacyOptionsRequirement` | [`PrivacyOptionsRequirementStatus`](#privacyoptionsrequirementstatus) | Show your own privacy-options entry point only while this is `'required'`. |
 
@@ -511,7 +517,7 @@ None of the four change according to *which* privacy choice the user made — th
 
 | Property | Type | Description |
 | --- | --- | --- |
-| `tagForUnderAgeOfConsent` (optional) | `boolean` | UMP's own flag, **separate** from [`RequestConfiguration.tagForUnderAgeOfConsent`](#requestconfiguration), which GMA uses when requesting ads. Setting one does not set the other; pass it to both if both apply. |
+| `tagForUnderAgeOfConsent` (optional) | `boolean` | UMP's own flag, **separate** from [`RequestConfiguration.tagForUnderAgeOfConsent`](#requestconfiguration), which GMA uses when requesting ads. Setting one does not set the other, so pass it to both if both apply. |
 | `debugSettings.testDeviceIds` (optional) | `string[]` | iOS takes the identifier for vendor, Android a hashed device ID. Both SDKs print the value the device needs to the console or logcat on the first consent request, so run once without this and copy the id out of the log. |
 | `debugSettings.geography` (optional) | [`DebugGeography`](#debuggeography) | The region to simulate. |
 
@@ -636,8 +642,8 @@ Literal type: `'notLoaded' \| 'alreadyShown' \| 'failedToShow'`
 
 | Code | Meaning |
 | --- | --- |
-| `notLoaded` | The ad is not ready. Check `isLoaded` before calling `show()`. Also covers an ad that has been released — it can never be shown again, and it is not `alreadyShown` because releasing an ad says nothing about whether it was ever presented. |
+| `notLoaded` | The ad is not ready. Check `isLoaded` before calling `show()`. Also covers an ad that has been released: it can never be shown again, and it is not `alreadyShown` because releasing an ad says nothing about whether it was ever presented. |
 | `alreadyShown` | This ad's `status` is already `'shown'`. |
 | `failedToShow` | The SDK itself refused to present it. `cause` carries the SDK's own error. |
 
-`notLoaded` and `alreadyShown` are decided from the ad's own `status` before anything reaches the SDK. Android's Next-Gen SDK has no readiness check at all, so deciding it here is what makes both platforms behave identically.
+`notLoaded` and `alreadyShown` are decided from the ad's own `status` before anything reaches the SDK. Android's Next-Gen SDK has no readiness check at all, so deciding it here is the only way to make both platforms behave identically.

@@ -5,7 +5,7 @@ description: "Preload a banner outside React, attach it to a screen, and subscri
 
 ## Preloading
 
-Creating an ad instance (which starts loading) and displaying it on screen are independent. You can create an ad before a screen transition, or at app startup.
+Creating an ad instance (which starts loading) and displaying it on screen are independent. You can create an ad at app startup, or before a screen transition.
 
 ```typescript
 // e.g. at module scope, or anywhere before a screen transition
@@ -29,7 +29,7 @@ function HomeScreen() {
 }
 ```
 
-`<BannerAdView>` attaches the native view on mount and **only detaches it on unmount** — the ad itself is not destroyed. Leaving this screen and coming back shows the same ad again, with no reload. To explicitly destroy an ad, call `ad.release()`.
+`<BannerAdView>` attaches the native view on mount, and **only detaches it on unmount**. The ad itself is not destroyed, so leaving this screen and coming back shows the same ad again, with no reload. To destroy an ad explicitly, call `ad.release()`.
 
 ## Hooks
 
@@ -40,7 +40,7 @@ The two hooks differ in what they own of the ad's lifetime.
 | `useBannerAd(options)` | yes | **yes** |
 | `useBannerAdState(ad)` | no (subscribes to an existing `ad`) | **no** |
 
-For the simple case where the ad's lifetime matches the screen's (no preloading), use `useBannerAd`.
+If you are not preloading, and the ad's lifetime matches the screen's, use `useBannerAd`.
 
 ```tsx
 import { useBannerAd, BannerAdSize, BannerAdView } from '@kazutoyo/expo-google-mobile-ads';
@@ -55,7 +55,7 @@ function Screen() {
 }
 ```
 
-To just display a preloaded ad on a screen, use `useBannerAdState` (see the preloading example above). This hook neither creates nor releases `ad` — the caller owns its lifetime.
+To display a preloaded ad on a screen, use `useBannerAdState` (see the preloading example above). It neither creates nor releases `ad`, so the caller owns its lifetime.
 
 For finer-grained state changes (impressions, clicks, revenue events, and so on), subscribe directly with `ad.addListener(...)`.
 

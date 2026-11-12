@@ -7,7 +7,7 @@ description: "パッケージルートからエクスポートしているコン
 import { createBannerAd, BannerAdView, BannerAdSize } from '@kazutoyo/expo-google-mobile-ads';
 ```
 
-以下はすべてパッケージルートからエクスポートしていて、iOS と Android の両方で動きます。プラットフォーム差がある項目には個別に記載しています。
+以下はすべてパッケージルートからエクスポートしており、iOS と Android の両方で動きます。プラットフォーム差がある項目には、個別に記載しています。
 
 ## コンポーネント
 
@@ -17,7 +17,7 @@ import { createBannerAd, BannerAdView, BannerAdSize } from '@kazutoyo/expo-googl
 
 バナー広告を表示します。マウント時にネイティブ View をアタッチし、アンマウント時は**広告を破棄せずにデタッチするだけ**なので、同じ広告を別の画面でもう一度表示できます。
 
-サイズはロード後は `ad.loadedSize`、ロード前は `ad.size` から決まります。つまりリクエストしたサイズで領域を確保しておき、実際に配信された広告のサイズが違った場合だけ補正します。広告を直接購読しているので、hooks を使わずにプリロード済みの広告を描画していても、ロード完了時に再描画されます。
+サイズは、ロード前は `ad.size`、ロード後は `ad.loadedSize` から決まります。リクエストしたサイズで領域を確保しておき、実際に配信された広告のサイズが違った場合だけ補正します。広告を直接購読しているため、hooks を使わずにプリロード済みの広告を描画していても、ロード完了時に再描画されます。
 
 release 済みの広告は、例外を投げずにサイズ0の箱として描画されます。
 
@@ -60,7 +60,7 @@ release 済みの広告は、例外を投げずにサイズ0の箱として描�
 | --- | --- |
 | `spec` | [`BannerAdSizeSpec`](#banneradsizespec) |
 
-画面幅や向きが変わったときにアダプティブサイズを計算し直します。`spec.orientation` が `'current'` のときは必ず使ってください。アンカー型のアダプティブサイズは、縦向きと横向きで解決される高さが変わるためです。
+画面幅や向きが変わったときにアダプティブサイズを計算し直します。`spec.orientation` が `'current'` のときは必ず使ってください。アンカー型のアダプティブサイズは、縦向きと横向きで高さが変わるためです。
 
 戻り値: [`BannerAdSize`](#banneradsize-1)
 
@@ -102,7 +102,7 @@ release 済みの広告は、例外を投げずにサイズ0の箱として描�
 
 呼び出し側が持っているリワード広告を購読します。生成も release もしません。
 
-報告するのはロード状態だけです。その広告が提供する報酬は [`ad.reward`](#rewardedad) にあり、ユーザーが実際に獲得したかどうかは `show()` の解決値だけが持ちます。これを分けていることが、広告を閉じただけの人に報酬を渡してしまう事故を防ぎます。
+報告するのはロード状態だけです。その広告が提供する報酬は [`ad.reward`](#rewardedad) にあり、ユーザーが実際に獲得したかどうかは `show()` の解決値だけが持ちます。この2つを分けることで、広告を閉じただけのユーザーに報酬を与える事故を防ぎます。
 
 戻り値: [`FullScreenAdState`](#fullscreenadstate)
 
@@ -112,7 +112,7 @@ SDK が最後に報告した同意情報を購読します。
 
 **読み取り専用**で、呼んでも何もリクエストしません。[`gatherConsent()`](#gatherconsentoptions) などの同意関数が呼ばれるまで、各フィールドは「まだ何も分かっていない」状態の値を持ちます。
 
-マウント時に SDK の永続化済み同意情報を取り込むことは**しません**。アプリを再起動すると、ネイティブ SDK が `'obtained'` を保持していても `status: 'unknown'` / `canRequestAds: false` を返します。そのため、この hook だけを見てプライバシーオプションのボタン表示を決める設定画面は、その起動中に同意関数を通っていない限り、再起動後は何も表示しなくなります。
+マウント時に、SDK が永続化している同意情報を読み込むことは**しません**。アプリを再起動すると、ネイティブ SDK が `'obtained'` を保持していても `status: 'unknown'` / `canRequestAds: false` を返します。そのため、この hook の値だけでプライバシーオプションのボタン表示を決めている設定画面は、その起動中に同意関数を一度も呼んでいないと、再起動後にボタンを表示しなくなります。
 
 戻り値: [`ConsentInfo`](#consentinfo)
 
@@ -146,7 +146,7 @@ SDK が最後に報告した同意情報を購読します。
 
 型: `SharedObject<`[`FullScreenAdEvents`](#fullscreenadevents)`>` を継承したクラス
 
-全画面のインタースティシャル広告です。**使い切り**で、`show()` の後は `status` が `'shown'` になります。これは終端状態で、そこから `load()` を呼んでも何も起きません。両プラットフォームの SDK 側も独自に再利用を拒否します（iOS は `AdAlreadyUsed`、Android は `AD_REUSED`）。次のインプレッションには新しい広告を作ってください。
+全画面のインタースティシャル広告です。**使い切り**で、`show()` の後は `status` が `'shown'` になります。これは終端状態で、そこから `load()` を呼んでも何も起きません。両プラットフォームの SDK 自体も再利用を拒否します（iOS は `AdAlreadyUsed`、Android は `AD_REUSED`）。次のインプレッションには新しい広告を作ってください。
 
 #### プロパティ
 
@@ -160,7 +160,7 @@ SDK が最後に報告した同意情報を購読します。
 
 | メソッド | 戻り値 | 説明 |
 | --- | --- | --- |
-| `show()` | `Promise<void>` | 広告を表示し、ユーザーが閉じた時点で resolve します。[`ShowAdError`](#showaderror) で reject します。ロード中の広告を**あえて待ちません**。`isLoaded` を見て、準備できていなければその回は諦めてください |
+| `show()` | `Promise<void>` | 広告を表示し、ユーザーが閉じた時点で resolve します。[`ShowAdError`](#showaderror) で reject します。ロード中の広告を**意図的に待ちません**。`isLoaded` を確認し、準備できていなければその回の表示は見送ってください |
 | `load()` | `void` | もう一度リクエストします。`status` が `'shown'` になった後は何も起きません |
 | `release()` | `void` | ネイティブの広告を破棄します |
 | `addListener(event, listener)` | `EventSubscription` | [`FullScreenAdEvents`](#fullscreenadevents) のいずれかを購読します |
@@ -175,7 +175,7 @@ SDK が最後に報告した同意情報を購読します。
 
 | プロパティ | 型 | 説明 |
 | --- | --- | --- |
-| `reward`（任意） | [`AdReward`](#adreward) | 読み取り専用。その広告が**提供するもの**です。ロード直後から読めるので、「何がもらえるか」を先にユーザーへ提示できます。**獲得した証拠ではありません。** iOS では表示前からこの値が埋まっているため、値の存在をもって「視聴した」とみなすと、開いてすぐ閉じたユーザーにも報酬が出てしまいます |
+| `reward`（任意） | [`AdReward`](#adreward) | 読み取り専用。その広告が**提供する報酬**です。ロード直後から読めるため、「何がもらえるか」を先にユーザーへ提示できます。**獲得した証拠ではありません。** iOS では表示前からこの値が入っているため、値の有無で「視聴した」と判定すると、開いてすぐ閉じたユーザーにも報酬を与えてしまいます |
 | `status` | [`FullScreenAdStatus`](#fullscreenadstatus) | 読み取り専用 |
 | `error`（任意） | [`AdError`](#aderror) | 読み取り専用 |
 | `responseInfo`（任意） | [`ResponseInfo`](#responseinfo) | 読み取り専用 |
@@ -211,7 +211,7 @@ SDK が最後に報告した同意情報を購読します。
 | `code` | [`ConsentErrorCode`](#consenterrorcode) | プラットフォーム間で正規化済み |
 | `cause`（任意） | `unknown` | 元のネイティブエラー |
 
-SDK 自身の数値コードは `message` の末尾に付けています。生の数値はプラットフォーム間で食い違うためです（コード `2` は iOS では `invalidAppID`、Android では `INTERNET_ERROR`）。
+SDK 自身の数値コードは、`message` の末尾に付けています。生の数値はプラットフォーム間で食い違うためです（コード `2` は iOS では `invalidAppID`、Android では `INTERNET_ERROR`）。
 
 ## 定数
 
@@ -237,7 +237,7 @@ SDK 自身の数値コードは `message` の末尾に付けています。生�
 
 高さ 50〜90dp のアンカー型アダプティブサイズです。同期関数なので、ロードを待たずに表示領域を確保できます。
 
-対応するネイティブ API は**両プラットフォームで非推奨**で、将来の SDK メジャーバージョンで削除される可能性があります。それでも残しているのは、`largeAnchoredAdaptive` より高さが低くレイアウトへの影響が小さいためです。意図して使う人に警告を出さないよう、TypeScript の `@deprecated` は付けていません。
+対応するネイティブ API は**両プラットフォームで非推奨**で、将来の SDK メジャーバージョンで削除される可能性があります。それでも残しているのは、`largeAnchoredAdaptive` より高さが低く、レイアウトへの影響が小さいためです。意図して使う場合に警告を出さないよう、TypeScript の `@deprecated` は付けていません。
 
 戻り値: [`BannerAdSize`](#banneradsize-1)
 
@@ -247,7 +247,7 @@ SDK 自身の数値コードは `message` の末尾に付けています。生�
 | --- | --- |
 | `options`（任意） | [`AdaptiveOptions`](#adaptiveoptions) |
 
-`anchoredAdaptive` の後継で、高さ 50〜150dp です。縦向き画面の高さの20%以内に収まり、動画広告の需要が高いときのために大きめの領域を確保します。
+`anchoredAdaptive` の後継で、高さは 50〜150dp です。縦向き画面の高さの20%以内に収まり、動画広告の需要が高いときのために大きめの領域を確保します。
 
 戻り値: [`BannerAdSize`](#banneradsize-1)
 
@@ -259,9 +259,9 @@ SDK 自身の数値コードは `message` の末尾に付けています。生�
 
 スクロールするコンテンツの中に置くためのインライン型アダプティブサイズで、`options.maxHeight` までの高さになります。
 
-返る `height` は**最大値**であり、最終的な高さではありません。配信される広告はもっと低いことがあり、実際に届いたサイズは `ad.loadedSize` が持ちます。
+返る `height` は**最大値**であり、最終的な高さではありません。配信される広告はこれより低いことがあり、実際のサイズは `ad.loadedSize` に入ります。
 
-`maxHeight` は必須で、既定値はありません。各 SDK の「最大高さなし」ヘルパーは、レイアウトとして確保しようのない値を返すためです（iOS はセンチネルの `0`、Android は画面の全高）。ここで既定値を選ぶと、呼び出し側が求めていない領域を勝手に確保することになります。
+`maxHeight` は必須で、既定値はありません。各 SDK の「最大高さなし」ヘルパーは、レイアウトとして確保しようのない値を返すためです（iOS はセンチネルの `0`、Android は画面の全高）。ここで既定値を決めると、呼び出し側が想定していない領域を確保することになります。
 
 `orientation` オプションもありません。アンカー型と違い、インラインの最大高さ形式は両プラットフォームとも画面の向きに依存しないためです。
 
@@ -285,11 +285,11 @@ spec オブジェクトを1回だけサイズに解決します。[`useBannerAdS
 | --- | --- |
 | `options` | [`BannerAdOptions`](#banneradoptions) |
 
-バナー広告を生成してロードを始めます。View を必要としないので React の外から呼べます。モジュールスコープでも、アプリ起動時でも、画面遷移の前でも構いません。
+バナー広告を生成してロードを始めます。View を必要としないので React の外から呼べます。モジュールスコープでも、アプリの起動時でも、画面遷移の前でもかまいません。
 
-SDK の初期化が終わっていない場合、ロードは終わるまでキューに積まれます。初期化が失敗した場合は、待ち続けるのではなく `status: 'error'` に移ります。
+SDK の初期化が終わっていない場合、ロードは初期化の完了までキューに積まれます。初期化が失敗した場合は、待ち続けずに `status: 'error'` へ移ります。
 
-広告のライフタイムは呼び出し側が持つので、不要になったら `release()` を呼んでください。
+広告のライフタイムは呼び出し側が持ちます。不要になったら `release()` を呼んでください。
 
 戻り値: [`BannerAd`](#bannerad)
 
@@ -317,11 +317,13 @@ SDK の初期化が終わっていない場合、ロードは終わるまでキ�
 
 Google Mobile Ads SDK を初期化します。広告をロードする前に、アプリ起動時に一度だけ呼びます。
 
-**このライブラリは自動では初期化しません。** UMP 同意との順序はアプリ側の判断です。この順序について Google 側の案内は定まっていません。「同意が先」とする読み方（`initialize()` がメディエーションアダプタを立ち上げるため）と、「初期化が先でよい」とする読み方（初期化自体は個人データを扱わず、`canRequestAds` が true になるまで広告を*リクエスト*しなければポリシーは満たすため）があります。自動初期化してしまうと、この片方をライブラリがアプリに代わって選んだことになり、上書きもできません。
+**このライブラリは自動で初期化しません。** UMP 同意との順序は、アプリ側で決めてください。
 
-判断する上で重要な点として、**`initialize()` はネイティブ SDK とメディエーションアダプタを即座に起動します。** 後述のキューが遅らせるのは広告の*ロード*だけで、初期化そのものは遅れません。初期化自体を同意の後に行いたいアプリは、2つの呼び出しの順序をそう組む必要があります。後から `canRequestAds` で判定しても、それは実現できません。
+この順序について、Google 側の案内は定まっていません。「同意が先」とする読み方があります（`initialize()` がメディエーションアダプタを起動するため）。一方で「初期化が先でよい」とする読み方もあります（初期化自体は個人データを扱わず、`canRequestAds` が true になるまで広告を*リクエスト*しなければポリシーを満たすため）。ライブラリが自動で初期化すると、この片方をアプリに代わって選ぶことになり、アプリ側から上書きもできません。
 
-複数回呼んでも同じ Promise を返します。初期化に失敗した場合はキャッシュした Promise を破棄するので、後から呼び直してリトライできます。そのとき、待たされていた広告にも失敗が伝わります。
+判断する上で重要な点があります。**`initialize()` は、ネイティブ SDK とメディエーションアダプタを即座に起動します。** キューが遅らせるのは広告の*ロード*だけで、初期化そのものは遅れません。初期化を同意の後に行いたい場合は、呼び出しの順序でそう組んでください。後から `canRequestAds` で判定しても実現できません。
+
+複数回呼んでも同じ Promise を返します。初期化に失敗した場合はキャッシュした Promise を破棄するため、後から呼び直してリトライできます。このとき、待機していた広告にも失敗が伝わります。
 
 戻り値: `Promise<`[`InitializationStatus`](#initializationstatus)`>`
 
@@ -351,7 +353,7 @@ Google Mobile Ads SDK を初期化します。広告をロードする前に、�
 | --- | --- |
 | `options`（任意） | [`ConsentRequestOptions`](#consentrequestoptions) |
 
-最新の同意情報を取得しますが、フォームは**表示しません**。更新とフォーム表示のタイミングを分ける必要があるときだけ使ってください。分ける必要がなければ `gatherConsent()` が両方やります。
+最新の同意情報を取得しますが、フォームは**表示しません**。更新とフォーム表示のタイミングを分ける必要があるときだけ使ってください。分ける必要がなければ、`gatherConsent()` が両方を行います。
 
 戻り値: `Promise<`[`ConsentInfo`](#consentinfo)`>`
 
@@ -377,7 +379,7 @@ Google Mobile Ads SDK を初期化します。広告をロードする前に、�
 
 保存済みの同意を消して、フォームを再表示できる状態に戻します。
 
-**開発ビルド限定**で、`__DEV__` が false のときは no-op です。同時に、デバイスを再テスト可能にする唯一の手段でもあります。SDK は同意を永続化するので、これを呼ばないとフローを通れるのは一度きりで、以降はアプリを入れ直すまでフォームが出ません。
+**開発ビルド限定**で、`__DEV__` が false のときは何もしません。同時に、同じデバイスで再テストする唯一の手段でもあります。SDK は同意を永続化するため、これを呼ばないと同意フローを通れるのは一度だけで、以降はアプリを入れ直すまでフォームが表示されません。
 
 戻り値: `Promise<`[`ConsentInfo`](#consentinfo)`>`
 
@@ -424,9 +426,9 @@ Google Mobile Ads SDK を初期化します。広告をロードする前に、�
 
 サイズがアダプティブであることと、どの系統かを表すマーカーです。
 
-両ネイティブ SDK は「アダプティブ」を width/height ではなく、広告サイズ型のフラグとして表しています（iOS は `GADAdSize.flags`、Android は `AdSize.isAnchoredAdaptiveBanner` / `isInlineAdaptiveBanner` / `isLargeAnchoredAdaptiveBanner`）。そのため2つの数値だけからは復元できません。**アダプティブサイズを丸ごと渡さなければならないのはこのためです。** `width` と `height` から作り直すとマーカーが落ち、ネイティブ側はその高さちょうどの固定バナーをリクエストします。エラーは出ないので気づけません。
+両ネイティブ SDK は「アダプティブ」を、width/height ではなく広告サイズ型のフラグとして表現しています（iOS は `GADAdSize.flags`、Android は `AdSize.isAnchoredAdaptiveBanner` / `isInlineAdaptiveBanner` / `isLargeAnchoredAdaptiveBanner`）。そのため2つの数値だけからは復元できません。**アダプティブサイズを丸ごと渡す必要があるのは、このためです。** `width` と `height` から作り直すとマーカーが失われ、ネイティブ側はその高さちょうどの固定バナーをリクエストします。エラーは出ないため、気づけません。
 
-向きを別フィールドにせずマーカーに畳み込んでいるのは、アンカー型のサイズが向きで実際に変わるためです。実機で測ると `largeAnchored` は 338×106、`largeAnchoredLandscape` は 338×80 です。
+向きを別フィールドにせずマーカーに含めているのは、アンカー型のサイズが向きによって実際に変わるためです。実機で測ると `largeAnchored` は 338×106、`largeAnchoredLandscape` は 338×80 です。
 
 ### `BannerAdEvents`
 
@@ -469,7 +471,7 @@ Google Mobile Ads SDK を初期化します。広告をロードする前に、�
 | `error`（任意） | [`AdError`](#aderror) | |
 | `loadedSize`（任意） | [`BannerAdSize`](#banneradsize-1) | 実際に配信された広告のサイズ |
 
-release 済みの広告は例外ではなく `{ isLoaded: false }` を返します。release した直後の広告をまだ描画しているコンポーネントがクラッシュしないためです。
+release 済みの広告は例外ではなく `{ isLoaded: false }` を返します。release した直後の広告をまだ描画しているコンポーネントが、クラッシュしないようにするためです。
 
 ### `BannerAdStatus`
 
@@ -492,11 +494,11 @@ release 済みの広告は例外ではなく `{ isLoaded: false }` を返しま�
 | `noActivity` | **Android 限定。** SDK ではなくこのライブラリが出すもので、フォアグラウンドに Activity がない状態で呼び出しが到達したことを表します |
 | `unknown` | ネイティブ側から認識可能なコードが送られてこなかった |
 
-Android の UMP には `misconfiguration` や `formUnavailable` に相当するコードがなく、それらの状況を `internal` か `invalidOperation` として報告します。
+Android の UMP には `misconfiguration` や `formUnavailable` に相当するコードがありません。これらの状況は `internal` か `invalidOperation` として報告されます。
 
 ### `ConsentInfo`
 
-`Readonly` — UMP が現時点で把握している内容のスナップショットです。すべての同意関数がこれで resolve します。公開されるスナップショットは、すべての `useConsentInfo()` 購読者と共有されるため凍結されています。
+`Readonly` — UMP が現時点で把握している内容のスナップショットです。すべての同意関数がこの値で resolve します。スナップショットはすべての `useConsentInfo()` 購読者と共有されるため、凍結しています。
 
 | プロパティ | 型 | 説明 |
 | --- | --- | --- |
@@ -505,14 +507,14 @@ Android の UMP には `misconfiguration` や `formUnavailable` に相当する�
 | `isConsentFormAvailable` | `boolean` | 現時点でフォームを表示できるか。iOS は3値（`UMPFormStatus`）、Android は boolean を返すので、両方が表現できる boolean に丸めています。iOS の `unknown` は `false` になります。アプリ側の対応は「unknown」と「unavailable」で変わらないためです |
 | `privacyOptionsRequirement` | [`PrivacyOptionsRequirementStatus`](#privacyoptionsrequirementstatus) | 自前のプライバシーオプション導線は、これが `'required'` のときだけ表示します |
 
-この4つは、ユーザーが**どの選択肢**を選んだかでは変化しません。同意が必要か、広告をリクエストできるかを表すもので、何を選んだかは持っていません。
+この4つは、ユーザーが**どの選択肢**を選んだかでは変化しません。同意が必要か、広告をリクエストできるかを表すだけで、選択の内容は持っていません。
 
 ### `ConsentRequestOptions`
 
 | プロパティ | 型 | 説明 |
 | --- | --- | --- |
-| `tagForUnderAgeOfConsent`（任意） | `boolean` | UMP 独自のフラグで、広告リクエスト時に GMA が使う [`RequestConfiguration.tagForUnderAgeOfConsent`](#requestconfiguration) とは**別物**です。片方を設定しても、もう片方は設定されません。両方に該当するなら両方に渡してください |
-| `debugSettings.testDeviceIds`（任意） | `string[]` | iOS は identifier for vendor、Android はハッシュ化されたデバイス ID を取ります。両 SDK とも、最初の同意リクエスト時にそのデバイスに必要な値をコンソール／logcat に出力するので、まず指定なしで一度実行して、ログから ID をコピーしてください |
+| `tagForUnderAgeOfConsent`（任意） | `boolean` | UMP 独自のフラグです。広告リクエスト時に GMA が使う [`RequestConfiguration.tagForUnderAgeOfConsent`](#requestconfiguration) とは**別物**で、片方を設定しても、もう片方は設定されません。両方に該当する場合は、両方に渡してください |
+| `debugSettings.testDeviceIds`（任意） | `string[]` | iOS は identifier for vendor、Android はハッシュ化されたデバイス ID を取ります。両 SDK とも、最初の同意リクエスト時に必要な値をコンソール / logcat に出力します。まず指定なしで一度実行し、ログから ID をコピーしてください |
 | `debugSettings.geography`（任意） | [`DebugGeography`](#debuggeography) | 疑似的に設定する地域 |
 
 `debugSettings` はデバッグビルドの、しかも指定したデバイスでのみ効きます。
@@ -523,13 +525,13 @@ Android の UMP には `misconfiguration` や `formUnavailable` に相当する�
 
 ユーザーの同意が必要か、そして取得済みかを表します。両プラットフォームで UMP 自身の enum に対応しています。
 
-`'unknown'` は `requestConsentInfoUpdate()` が一度も成功していない状態です。エラーではなく、まだ何も尋ねていないという意味です。
+`'unknown'` は、`requestConsentInfoUpdate()` が一度も成功していない状態です。エラーではなく、まだ何も尋ねていないことを表します。
 
 ### `DebugGeography`
 
 リテラル型: `'disabled' \| 'eea' \| 'regulatedUsState' \| 'other'`
 
-同意フローをテストするために、SDK にどの地域のデバイスとして振る舞わせるかを指定します。`ConsentRequestOptions.debugSettings.testDeviceIds` に挙げたデバイスにのみ適用され、それ以外のデバイスでは両プラットフォームとも無視されます。
+同意フローをテストするために、SDK にどの地域のデバイスとして振る舞わせるかを指定します。適用されるのは `ConsentRequestOptions.debugSettings.testDeviceIds` に挙げたデバイスだけで、それ以外のデバイスでは両プラットフォームとも無視されます。
 
 ### `FullScreenAdEvents`
 
@@ -560,7 +562,7 @@ Android の UMP には `misconfiguration` や `formUnavailable` に相当する�
 
 リテラル型: `'loading' \| 'loaded' \| 'shown' \| 'error'`
 
-`'shown'` は**終端状態**です。この広告は両 SDK とも一度きりのものなので、表示済みの広告が再ロードされることはありません。新しく作り直してください。
+`'shown'` は**終端状態**です。この広告は両 SDK とも使い切りのため、表示済みの広告が再ロードされることはありません。新しく作り直してください。
 
 ### `InitializationStatus`
 
@@ -628,7 +630,7 @@ Android の UMP には `misconfiguration` や `formUnavailable` に相当する�
 
 | イベント | ペイロード | 説明 |
 | --- | --- | --- |
-| `earnedReward` | [`AdReward`](#adreward) | ユーザーが報酬を獲得した。計測目的でなければ、付与はこのイベントではなく `show()` の解決値から行ってください |
+| `earnedReward` | [`AdReward`](#adreward) | ユーザーが報酬を獲得した。計測目的を除き、付与はこのイベントではなく `show()` の解決値から行ってください |
 
 ### `ShowAdErrorCode`
 
@@ -636,8 +638,8 @@ Android の UMP には `misconfiguration` や `formUnavailable` に相当する�
 
 | コード | 意味 |
 | --- | --- |
-| `notLoaded` | 広告の準備ができていません。`show()` の前に `isLoaded` を確認してください。release 済みの広告もこれになります。二度と表示できませんが、release したこと自体は「表示済みかどうか」とは無関係なので `alreadyShown` ではありません |
+| `notLoaded` | 広告の準備ができていません。`show()` の前に `isLoaded` を確認してください。release 済みの広告もこのコードになります。二度と表示できませんが、release は「表示済みかどうか」とは無関係なため `alreadyShown` ではありません |
 | `alreadyShown` | この広告の `status` はすでに `'shown'` です |
 | `failedToShow` | SDK 自体が表示を拒否しました。`cause` に SDK 自身のエラーが入ります |
 
-`notLoaded` と `alreadyShown` は、SDK に到達する前に広告自身の `status` から判定しています。Android の Next-Gen SDK には準備状態を問い合わせる API が一切ないので、こちら側で判定することが両プラットフォームの挙動を揃える唯一の方法です。
+`notLoaded` と `alreadyShown` は、SDK に到達する前に広告自身の `status` から判定しています。Android の Next-Gen SDK には準備状態を問い合わせる API がないため、こちら側で判定することが、両プラットフォームの挙動を揃える唯一の方法です。
