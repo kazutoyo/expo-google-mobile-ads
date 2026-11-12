@@ -26,7 +26,7 @@ Android は [GMA Next-Gen SDK](https://developers.google.com/admob/android/next-
 ## サポート範囲
 
 - **New Architecture 専用**です。Old Architecture では動きません
-- **Expo SDK 57 以降**、**iOS 16.4 以降**、**Android minSdk 24 以降**
+- **Expo SDK 58 以降**（58.0.21 以降）、**iOS 16.4 以降**、**Android minSdk 24 以降**
 - バナー・インタースティシャル・リワード広告・UMP 同意管理
 
 ネイティブ広告、アプリ起動時広告（App Open）、リワード広告のサーバーサイド検証には対応していません。

@@ -1,7 +1,7 @@
 import type { SharedObject } from 'expo-modules-core/types';
 
 import type { BannerAdSize } from './BannerAdSize';
-import NativeModule from './ExpoGoogleMobileAdsModule';
+import { NativeObjects } from './ExpoGoogleMobileAdsModule';
 import { runWhenInitialized } from './initialization';
 import type {
   AdError,
@@ -137,7 +137,7 @@ export type BannerAdOptions = {
  * If the SDK hasn't finished initializing yet, the load is deferred until it does.
  */
 export function createBannerAd(options: BannerAdOptions): BannerAd {
-  const ad: BannerAd = new NativeModule.BannerAd(
+  const ad: BannerAd = new NativeObjects.BannerAd(
     options.adUnitId,
     options.size,
     options.requestOptions

@@ -1,9 +1,17 @@
 {
-  "platforms": ["apple", "android"],
+  "platforms": [
+    "apple",
+    "android"
+  ],
   "apple": {
-    "modules": ["ExpoGoogleMobileAdsModule"]
+    "modules": [
+      "ExpoGoogleMobileAdsModule",
+      "ExpoGoogleMobileAdsObjectsModule"
+    ]
   },
   "android": {
-    "modules": ["expo.modules.googlemobileads.ExpoGoogleMobileAdsModule"]
+    "modules": [
+      "expo.modules.googlemobileads.ExpoGoogleMobileAdsObjectsModule"
+    ]
   }
 }

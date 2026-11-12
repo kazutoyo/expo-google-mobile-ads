@@ -4,7 +4,7 @@ import type { StyleProp, ViewStyle } from 'react-native';
 import { isReleased, sharedObjectIdOf, type BannerAd } from './BannerAd';
 import { useBannerAdState } from './hooks/useBannerAd';
 
-const NativeView = requireNativeViewManager('ExpoGoogleMobileAds', 'BannerAdView');
+const NativeView = requireNativeViewManager('ExpoGoogleMobileAdsObjects', 'BannerAdView');
 
 export type BannerAdViewProps = {
   /** An ad created by createBannerAd or useBannerAd. Safe to pass before it has loaded. */

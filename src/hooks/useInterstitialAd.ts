@@ -2,7 +2,7 @@ import { useEventListener } from 'expo';
 import { useReleasingSharedObject } from 'expo-modules-core';
 import { useState } from 'react';
 
-import NativeModule from '../ExpoGoogleMobileAdsModule';
+import { NativeObjects } from '../ExpoGoogleMobileAdsModule';
 import { isFullScreenAdReleased, loadFullScreenAdWhenInitialized } from '../FullScreenAd';
 import type { FullScreenAdOptions } from '../FullScreenAd';
 import { attachShow } from '../InterstitialAd';
@@ -54,7 +54,7 @@ export function useInterstitialAd(
   options: FullScreenAdOptions
 ): FullScreenAdState & { ad: InterstitialAd } {
   const ad = useReleasingSharedObject<InterstitialAd>(() => {
-    const created: NativeInterstitialAd = new NativeModule.InterstitialAd(
+    const created: NativeInterstitialAd = new NativeObjects.InterstitialAd(
       options.adUnitId,
       options.requestOptions
     );

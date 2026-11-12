@@ -1,6 +1,6 @@
 import type { SharedObject } from 'expo-modules-core/types';
 
-import NativeModule from './ExpoGoogleMobileAdsModule';
+import { NativeObjects } from './ExpoGoogleMobileAdsModule';
 import {
   ShowAdError,
   assertShowable,
@@ -69,7 +69,7 @@ export function attachShow(ad: NativeRewardedAd): RewardedAd {
  * next impression.
  */
 export function createRewardedAd(options: FullScreenAdOptions): RewardedAd {
-  const ad: NativeRewardedAd = new NativeModule.RewardedAd(
+  const ad: NativeRewardedAd = new NativeObjects.RewardedAd(
     options.adUnitId,
     options.requestOptions
   );

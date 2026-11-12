@@ -7,6 +7,19 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-11
+
+### Changed
+
+- **Breaking:** requires Expo SDK 58 (`expo` 58.0.21 or later). The
+  module-level functions (initialization, request configuration, adaptive
+  sizes, UMP consent) now use the Expo Modules API 2.0 on both iOS and
+  Android, which does not build on SDK 57. The ad objects and the banner view
+  stay on the 1.0 API, in a second native module, `ExpoGoogleMobileAdsObjects`.
+  The JavaScript API is unchanged.
+
+- Google Mobile Ads SDK: iOS `~> 13.12`, Android `ads-mobile-sdk` 1.6.0.
+
 ## [0.1.0] - 2026-08-28
 
 First release.

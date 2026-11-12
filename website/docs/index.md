@@ -20,7 +20,7 @@ Native ads, app-open ads, and server-side verification for rewarded ads are not 
 
 ## Requirements
 
-- **Expo SDK 57+**, declared as a `peerDependencies` constraint. A mismatched version surfaces at install time instead of failing later in the native build.
+- **Expo SDK 58+** (58.0.21 or later), declared as a `peerDependencies` constraint. A mismatched version surfaces at install time instead of failing later in the native build.
 - **New Architecture only.** Old Architecture is not supported.
 - **iOS 16.4+**, **Android minSdk 24+**.
 

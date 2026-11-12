@@ -20,7 +20,7 @@ npx expo install @kazutoyo/expo-google-mobile-ads
 
 ## 動作要件
 
-- **Expo SDK 57 以降** — `peerDependencies` で宣言しているため、バージョンが合わないときはネイティブビルドを待たずに npm / yarn のインストール時にわかります
+- **Expo SDK 58 以降**（58.0.21 以降） — `peerDependencies` で宣言しているため、バージョンが合わないときはネイティブビルドを待たずに npm / yarn のインストール時にわかります
 - **New Architecture 専用**です。Old Architecture では動きません
 - **iOS 16.4 以降**、**Android minSdk 24 以降**
 

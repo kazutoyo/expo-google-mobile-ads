@@ -4,7 +4,7 @@ import { useState } from 'react';
 
 import { isReleased, loadWhenInitialized, type BannerAd, type BannerAdOptions } from '../BannerAd';
 import type { BannerAdSize } from '../BannerAdSize';
-import NativeModule from '../ExpoGoogleMobileAdsModule';
+import { NativeObjects } from '../ExpoGoogleMobileAdsModule';
 import type { AdError } from '../types';
 
 export type BannerAdState = {
@@ -70,7 +70,7 @@ export function useBannerAdState(ad: BannerAd): BannerAdState {
  */
 export function useBannerAd(options: BannerAdOptions): BannerAdState & { ad: BannerAd } {
   const ad = useReleasingSharedObject<BannerAd>(() => {
-    const created: BannerAd = new NativeModule.BannerAd(
+    const created: BannerAd = new NativeObjects.BannerAd(
       options.adUnitId,
       options.size,
       options.requestOptions

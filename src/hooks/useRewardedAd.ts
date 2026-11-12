@@ -2,7 +2,7 @@ import { useEventListener } from 'expo';
 import { useReleasingSharedObject } from 'expo-modules-core';
 import { useState } from 'react';
 
-import NativeModule from '../ExpoGoogleMobileAdsModule';
+import { NativeObjects } from '../ExpoGoogleMobileAdsModule';
 import { isFullScreenAdReleased, loadFullScreenAdWhenInitialized } from '../FullScreenAd';
 import type { FullScreenAdOptions } from '../FullScreenAd';
 import { attachShow } from '../RewardedAd';
@@ -52,7 +52,7 @@ export function useRewardedAd(
   options: FullScreenAdOptions
 ): FullScreenAdState & { ad: RewardedAd } {
   const ad = useReleasingSharedObject<RewardedAd>(() => {
-    const created: NativeRewardedAd = new NativeModule.RewardedAd(
+    const created: NativeRewardedAd = new NativeObjects.RewardedAd(
       options.adUnitId,
       options.requestOptions
     );

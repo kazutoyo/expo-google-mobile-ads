@@ -8,9 +8,6 @@ import type {
 } from './types';
 
 declare class ExpoGoogleMobileAdsModule {
-  BannerAd: any;
-  InterstitialAd: any;
-  RewardedAd: any;
   initializeAsync(): Promise<InitializationStatus>;
   setRequestConfiguration(config: RequestConfiguration): void;
   getAnchoredAdaptiveSize(width: number, orientation: string): { width: number; height: number };
@@ -27,4 +24,16 @@ declare class ExpoGoogleMobileAdsModule {
   resetConsentAsync(): Promise<ConsentInfo>;
 }
 
+// The ad objects live in a native module of their own: the functions above are on the Expo
+// Modules API 2.0, which on Android is a separate runtime that cannot also hold the 1.0 classes
+// and view these still need.
+declare class ExpoGoogleMobileAdsObjects {
+  BannerAd: any;
+  InterstitialAd: any;
+  RewardedAd: any;
+}
+
 export default requireNativeModule<ExpoGoogleMobileAdsModule>('ExpoGoogleMobileAds');
+
+export const NativeObjects =
+  requireNativeModule<ExpoGoogleMobileAdsObjects>('ExpoGoogleMobileAdsObjects');
