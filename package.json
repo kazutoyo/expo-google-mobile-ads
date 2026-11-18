@@ -26,6 +26,7 @@
     "clean": "node internal/module_scripts/clean.js",
     "lint": "eslint src/",
     "test": "jest --forceExit",
+    "test:native:ios": "bash internal/module_scripts/test-app-open-expiry-ios.sh",
     "prepare": "node internal/module_scripts/prepare.js",
     "open:ios": "node internal/module_scripts/open-ios.js",
     "open:android": "node internal/module_scripts/open-android.js",

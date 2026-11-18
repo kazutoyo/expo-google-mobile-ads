@@ -24,5 +24,6 @@ android {
 }
 
 dependencies {
+  testImplementation "junit:junit:4.13.2"
   implementation "com.google.android.libraries.ads.mobile.sdk:ads-mobile-sdk:1.6.0"
 }

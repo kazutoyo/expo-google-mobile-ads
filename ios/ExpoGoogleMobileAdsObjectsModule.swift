@@ -64,6 +64,24 @@ public final class ExpoGoogleMobileAdsObjectsModule: Module {
       }
     }
 
+    Class("AppOpenAd", FullScreenAppOpenAd.self) {
+      Constructor { (adUnitId: String, requestOptions: [String: Any?]?) -> FullScreenAppOpenAd in
+        FullScreenAppOpenAd(adUnitId: adUnitId, requestOptions: requestOptions)
+      }
+
+      Property("status") { (ad: FullScreenAppOpenAd) in ad.appOpenStatus }
+      Property("error") { (ad: FullScreenAppOpenAd) in ad.error }
+      Property("responseInfo") { (ad: FullScreenAppOpenAd) in ad.responseInfo }
+
+      Function("load") { (ad: FullScreenAppOpenAd) in ad.load() }
+      Function("markLoadFailed") { (ad: FullScreenAppOpenAd, message: String) in
+        ad.markLoadFailed(message)
+      }
+      AsyncFunction("showAsync") { (ad: FullScreenAppOpenAd, promise: Promise) in
+        ad.showAsync(promise)
+      }
+    }
+
     Class("RewardedAd", FullScreenRewardedAd.self) {
       Constructor { (adUnitId: String, requestOptions: [String: Any?]?) -> FullScreenRewardedAd in
         FullScreenRewardedAd(adUnitId: adUnitId, requestOptions: requestOptions)
@@ -83,6 +101,62 @@ public final class ExpoGoogleMobileAdsObjectsModule: Module {
       AsyncFunction("showAsync") { (ad: FullScreenRewardedAd, promise: Promise) in
         ad.showAsync(promise)
       }
+    }
+
+    Class("SwipeableInterstitialAd", EmbeddedSwipeableInterstitialAd.self) {
+      Constructor { (adUnitId: String, size: [String: Double]?, maxScreenHoldDuration: Double,
+                     requestOptions: [String: Any?]?) -> EmbeddedSwipeableInterstitialAd in
+        EmbeddedSwipeableInterstitialAd(adUnitId: adUnitId, size: size,
+          maxScreenHoldDuration: maxScreenHoldDuration, requestOptions: requestOptions)
+      }
+      Property("status") { (ad: EmbeddedSwipeableInterstitialAd) in ad.status }
+      Property("error") { (ad: EmbeddedSwipeableInterstitialAd) in ad.error }
+      Property("responseInfo") { (ad: EmbeddedSwipeableInterstitialAd) in ad.responseInfo }
+      Property("minScreenHoldDuration") { (ad: EmbeddedSwipeableInterstitialAd) in ad.minScreenHoldDuration }
+      Function("load") { (ad: EmbeddedSwipeableInterstitialAd) in ad.load() }
+      Function("markLoadFailed") { (ad: EmbeddedSwipeableInterstitialAd, message: String) in
+        ad.markLoadFailed(message)
+      }
+    }
+
+    View(SwipeableInterstitialAdView.self) {
+      Prop("ad") { (view: SwipeableInterstitialAdView, ad: EmbeddedSwipeableInterstitialAd?) in
+        view.setAd(ad)
+      }
+    }
+    Class("RewardedInterstitialAd", FullScreenRewardedInterstitialAd.self) {
+      Constructor { (adUnitId: String, requestOptions: [String: Any?]?) -> FullScreenRewardedInterstitialAd in
+        FullScreenRewardedInterstitialAd(adUnitId: adUnitId, requestOptions: requestOptions)
+      }
+
+      Property("status") { (ad: FullScreenRewardedInterstitialAd) in ad.status }
+      Property("error") { (ad: FullScreenRewardedInterstitialAd) in ad.error }
+      Property("responseInfo") { (ad: FullScreenRewardedInterstitialAd) in ad.responseInfo }
+      Property("reward") { (ad: FullScreenRewardedInterstitialAd) in ad.reward }
+
+      Function("load") { (ad: FullScreenRewardedInterstitialAd) in ad.load() }
+      Function("markLoadFailed") { (ad: FullScreenRewardedInterstitialAd, message: String) in
+        ad.markLoadFailed(message)
+      }
+      AsyncFunction("showAsync") { (ad: FullScreenRewardedInterstitialAd, promise: Promise) in
+        ad.showAsync(promise)
+      }
+    }
+
+    Class("NativeAd", NativeAdObject.self) {
+      Constructor { (adUnitId: String, requestOptions: [String: Any?]?) in
+        NativeAdObject(adUnitId: adUnitId, requestOptions: requestOptions)
+      }
+      Property("status") { (ad: NativeAdObject) in ad.value("status") as? String ?? "loading" }
+      Property("error") { (ad: NativeAdObject) in ad.value("error") as? [String: Any?] }
+      Property("responseInfo") { (ad: NativeAdObject) in ad.value("responseInfo") as? [String: Any?] }
+      Property("assets") { (ad: NativeAdObject) in ad.value("assets") as? [String: Any?] }
+      Function("load") { (ad: NativeAdObject) in ad.load() }
+      Function("markLoadFailed") { (ad: NativeAdObject, message: String) in ad.markLoadFailed(message) }
+    }
+    View(NativeAdCardView.self) {
+      ViewName("NativeAdView")
+      Prop("ad") { (view: NativeAdCardView, ad: NativeAdObject?) in view.setAd(ad) }
     }
 
     View(BannerAdView.self) {

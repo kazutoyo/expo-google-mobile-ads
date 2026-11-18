@@ -59,7 +59,7 @@ export declare class BannerAd extends SharedObject<BannerAdEvents> {
  *
  * @internal
  */
-export function sharedObjectIdOf(ad: BannerAd): number | null {
+export function sharedObjectIdOf(ad: object): number | null {
   // @ts-expect-error internal property installed by expo-modules-core on every SharedObject
   const sharedObjectId = ad.__expo_shared_object_id__;
   if (typeof sharedObjectId !== 'number' || sharedObjectId === 0) {
@@ -83,7 +83,7 @@ export function sharedObjectIdOf(ad: BannerAd): number | null {
  * raises `SharedObject.NotFoundException` as soon as the registry entry is gone. Unguarded,
  * that propagates straight out of whatever React render read it.
  */
-export function isReleased(ad: BannerAd): boolean {
+export function isReleased(ad: Pick<BannerAd, 'status'>): boolean {
   try {
     // Any property would do; `status` is the cheapest. A live ad always has one, so a missing
     // value means gone just as much as a throw does.
@@ -110,7 +110,9 @@ function messageOf(error: unknown): string {
  *
  * @internal
  */
-export function loadWhenInitialized(ad: BannerAd): void {
+export function loadWhenInitialized(
+  ad: Pick<BannerAd, 'status' | 'load' | 'markLoadFailed'>
+): void {
   runWhenInitialized(
     () => {
       if (isReleased(ad)) return;

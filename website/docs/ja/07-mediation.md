@@ -3,9 +3,9 @@ title: "メディエーション"
 description: "config plugin の依存フック経由でメディエーションアダプタを追加します。"
 ---
 
-このライブラリは、メディエーションアダプタのバージョンを固定した「キュレート済みリスト」を持っていません。アダプタは頻繁に更新されるので、ここで固定しても腐ってしまうためです。代わりに config plugin が依存を素で受け取る口を持っているので、必要なものを自分で指定してください。
+このライブラリは、メディエーションアダプタのバージョンを固定したリストを持っていません。アダプタは頻繁に更新されるため、固定するとすぐに古くなるからです。代わりに、config plugin が依存関係をそのまま受け取ります。必要なアダプタは自分で指定してください。
 
-以下は AppLovin での実例です。実在する Android のアーティファクト座標と iOS の pod バージョンなので、そのままコピーの出発点にできるかと思います。
+以下は AppLovin の例です。Android のアーティファクト座標と iOS の pod バージョンはどちらも実在するものなので、そのままコピーの出発点にできます。
 
 ```json
 {
@@ -29,11 +29,11 @@ description: "config plugin の依存フック経由でメディエーション�
 }
 ```
 
-上の例で Android と iOS のバージョンが違うのは意図的です。両アダプタは独立にバージョニングされていて、よく食い違います。**片方の番号をもう片方に流用しないでください。** それぞれの changelog から読む必要があります。
+上の例で Android と iOS のバージョンが違うのは意図的です。両アダプタは独立してバージョニングされており、番号は頻繁に食い違います。**片方の番号をもう片方に流用しないでください。** バージョンはそれぞれの changelog で確認します。
 
-**changelog を読むときは「(In progress)」に注意してください。** Google のアダプタ changelog は、まだ出ていない*次の*バージョンを最上段に `(In progress)` 付きで載せています。一番上をそのまま取ると存在しない番号になってしまい、`pod install` や Gradle の解決が失敗します。`(In progress)` があれば、その*下*の最初のエントリを取ってください。
+**changelog を読むときは `(In progress)` に注意してください。** Google のアダプタ changelog は、まだリリースされていない*次の*バージョンを、最上段に `(In progress)` 付きで掲載します。一番上をそのまま使うと存在しないバージョンになり、`pod install` や Gradle の依存解決が失敗します。`(In progress)` が付いていたら、その*下*の最初のエントリを使ってください。
 
-**バージョンは動くので、ここからコピーしたまま放置しないでください。** 追加する時点で、下の changelog から現在のバージョンを取ります。他のネットワークも同じで、下表のアーティファクト ID（Android）か pod 名（iOS）に、そのとき changelog が示すバージョンを添えてください。
+**バージョンは更新されます。ここからコピーした値をそのまま使い続けないでください。** アダプタを追加する時点で、下表の changelog から最新のバージョンを確認します。他のネットワークも同様に、下表のアーティファクト ID（Android）または pod 名（iOS）へ、その時点の changelog が示すバージョンを添えてください。
 
 | ネットワーク | Android | iOS |
 |---|---|---|
@@ -43,4 +43,4 @@ description: "config plugin の依存フック経由でメディエーション�
 | ironSource | `com.google.ads.mediation:ironsource` ([changelog](https://developers.google.com/admob/android/mediation/ironsource)) | `GoogleMobileAdsMediationIronSource` ([changelog](https://developers.google.com/admob/ios/mediation/ironsource)) |
 | LY Ads Network（旧 LINE Ads Network） | `com.google.ads.mediation:line` ([changelog](https://developers.google.com/admob/android/mediation/line)) | `GoogleMobileAdsMediationLine` ([changelog](https://developers.google.com/admob/ios/mediation/line)) |
 
-`androidMavenRepositories` は、ネットワーク固有の Maven リポジトリが要るとき（Pangle など）だけ指定します。
+`androidMavenRepositories` は、ネットワーク固有の Maven リポジトリが必要なとき（Pangle など）だけ指定します。

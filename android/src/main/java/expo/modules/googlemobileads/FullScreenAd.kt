@@ -427,6 +427,13 @@ abstract class FullScreenAd(
    * one of the two writes. (The `@Volatile` on [state] still matters: it is what makes the JS-side
    * getters, which do not take this lock, see the new value.)
    */
+  /** Expires only this unused load; an in-flight presentation keeps its callbacks. */
+  protected fun expireLoadedAd(loadId: Long) {
+    if (isStaleLoadResult(loadId) || shouldDiscardLoadResult || status != "loaded") return
+    tearDownAd()
+    setState("error", mapOf("code" to -1, "message" to "The app open ad expired. Load a fresh ad.", "domain" to "ExpoGoogleMobileAds"))
+  }
+
   private fun setState(status: String, error: Map<String, Any?>?) {
     synchronized(stateLock) {
       state = state.copy(status = status, error = error)

@@ -247,6 +247,13 @@ class FullScreenAd: SharedObject {
   /// nothing; `FullScreenRewardedAd` overrides this to return the latched reward, or nil.
   func showResult() -> [String: Any]? { nil }
 
+  /// A format-specific cache expiry must not tear down an ad already presenting.
+  func expireLoadedAd(loadId: Int) {
+    guard !isStaleLoadResult(loadId), !shouldDiscardLoadResult, status == "loaded" else { return }
+    tearDownAd()
+    setStatus("error", error: ["code": -1, "message": "The app open ad expired. Load a fresh ad.", "domain": "ExpoGoogleMobileAds"])
+  }
+
   /// Called by a subclass from its load completion handler, on the main thread.
   func handleLoaded(responseInfo info: ResponseInfo?) {
     // Walk the GMA response info outside the lock: `stateLock` is taken by the JS-side Property

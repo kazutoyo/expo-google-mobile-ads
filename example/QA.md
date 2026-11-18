@@ -353,3 +353,41 @@ D and E above.
 For each item, record which platform it was run on, the actual result, and (if relevant) the
 matching `adb logcat` / Xcode console line that evidences it. Paste the line into this file —
 don't reference a scratch file outside the repository, which nobody cloning it can read.
+
+## Native ads
+
+- [ ] Load with the platform test ID and confirm success and error state.
+- [ ] Release during loading; no late result or crash.
+- [ ] Retry a failed request and replace a loaded ad.
+- [ ] Mount before loading; confirm attribution, AdChoices, media/video, optional assets and click-through.
+- [ ] Move the ad between cards and unmount; only one card shows it, with no duplicate impression.
+- [ ] Release while mounted; the card clears.
+
+## App open ads
+
+- [ ] Load with the platform test ID and confirm success and error state.
+- [ ] Release during loading; no late result or crash.
+- [ ] Retry a failed request and replace a loaded ad.
+- [ ] Show, dismiss, then attempt to show again; the second call is rejected.
+- [ ] Release during presentation; the pending promise rejects.
+- [ ] Wait four hours after loading; show rejects and a fresh ad can load.
+
+### App open expiry regressions
+
+- `npm run test:native:ios` runs the actual Swift expiry helper with an injected continuous clock; no device or four-hour wait is needed.
+- In a prebuilt Android example, `./gradlew :kazutoyo-expo-google-mobile-ads:testDebugUnitTest` exercises the actual Kotlin expiry helper with an injected elapsed-realtime clock.
+- [ ] Load an ad, leave the process alive through device sleep lasting over four hours, then foreground the app. Confirm `isLoaded=false` and the expiry error arrives through statusChange on both OSes.
+- [ ] Return to foreground before four hours; the ad remains loaded.
+- [ ] Show while a foreground or timer revalidation is pending; the presentation callbacks and show promise remain intact.
+
+## Rewarded interstitial ads
+
+- [ ] Load with the platform test ID and confirm success and error state.
+- [ ] Release during loading; no late result or crash.
+- [ ] Retry a failed request and replace a loaded ad.
+- [ ] Show, dismiss, then attempt to show again; the second call is rejected.
+- [ ] Release during presentation; the pending promise rejects.
+- [ ] Show a reward explanation and skip option first. Complete vs. dismiss early; grant only the earned reward, once.
+
+- [ ] Dismiss without earning: the sample shows an explicit dismissal message rather than raw null.
+- [ ] With a supported mediated adapter that reports reward after dismissal, keep the ad/subscription mounted and confirm the earned-reward display updates once; never grant from both the event and show result.

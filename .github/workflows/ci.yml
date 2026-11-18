@@ -97,6 +97,8 @@ jobs:
       - run: npx expo prebuild --platform ios --clean
         working-directory: example
 
+      - run: npm run test:native:ios
+
       - name: Build
         working-directory: example/ios
         run: |
@@ -145,4 +147,4 @@ jobs:
 
       - name: Build
         working-directory: example/android
-        run: ./gradlew assembleDebug --no-daemon
+        run: ./gradlew :kazutoyo-expo-google-mobile-ads:testDebugUnitTest assembleDebug --no-daemon

@@ -1,3 +1,6 @@
+import RewardedInterstitialExample from './RewardedInterstitialExample';
+import NativeExample from './NativeExample';
+import AppOpenExample from './AppOpenExample';
 import { useEffect, useState } from 'react';
 import {
   Button,
@@ -33,6 +36,8 @@ import {
   type InterstitialAd,
   type RewardedAd,
 } from '@kazutoyo/expo-google-mobile-ads';
+
+import { SwipeableInterstitialExample } from './SwipeableInterstitialExample';
 
 const TEST_BANNER_UNIT_ID = 'ca-app-pub-3940256099942544/9214589741';
 const TEST_INTERSTITIAL_UNIT_ID = 'ca-app-pub-3940256099942544/1033173712';
@@ -708,6 +713,7 @@ function ConsentSection({ onCanRequestAds }: { onCanRequestAds: () => void }) {
         }
       />
       <Button
+        testID="consent-outside-eea"
         title="Gather consent (outside EEA)"
         disabled={busy}
         onPress={() =>
@@ -766,6 +772,10 @@ export default function App() {
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
         <ConsentSection onCanRequestAds={beginInitializationOnce} />
+        <SwipeableInterstitialExample />
+        <RewardedInterstitialExample />
+        <NativeExample />
+        <AppOpenExample />
         <Button title="Show the banner size gallery" onPress={() => setShowGallery(true)} />
         <Button
           title="Show the full-screen ad QA screen"
