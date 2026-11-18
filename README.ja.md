@@ -31,6 +31,9 @@ Android は [GMA Next-Gen SDK](https://developers.google.com/admob/android/next-
 
 リワード広告のサーバーサイド検証には対応していません。
 
+iOS には CocoaPods に加え、Expo の実験的な Swift Package Manager 連携用マニフェストを同梱しています。
+設定方法と現在のビルド制約は [SwiftPM の導入手順](https://kazutoyo.github.io/expo-google-mobile-ads/ja/installation#swift-package-manager-ios)を参照してください。
+
 ## インストール
 
 ```sh

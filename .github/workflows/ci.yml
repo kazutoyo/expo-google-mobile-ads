@@ -63,15 +63,20 @@ jobs:
           npm pack
           tar -tzf kazutoyo-expo-google-mobile-ads-*.tgz > /tmp/tarball.txt
           for entry in package/build/index.js package/plugin/build/index.js \
-                       package/app.plugin.js package/expo-module.config.json; do
+                       package/app.plugin.js package/expo-module.config.json \
+                       package/Package.swift package/ios/ExpoGoogleMobileAds.podspec; do
             grep -qx "$entry" /tmp/tarball.txt || { echo "missing from tarball: $entry"; exit 1; }
           done
           # Tests are excluded by `files`; a stray one means the pattern broke.
           ! grep -q '\.test\.tsx\?$' /tmp/tarball.txt || { echo "tests leaked into tarball"; exit 1; }
 
   ios:
-    name: iOS build
+    name: iOS (${{ matrix.integration }})
     runs-on: macos-26
+    strategy:
+      fail-fast: false
+      matrix:
+        integration: [cocoapods, swiftpm]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -91,6 +96,9 @@ jobs:
       - run: npm ci
         working-directory: example
 
+      - name: Validate the SwiftPM manifest
+        run: swift package --package-path . dump-package > /dev/null
+
       # Regenerates the native project from scratch so the config plugin runs
       # for real — a bad Info.plist edit or a missing App ID shows up here and
       # nowhere else.
@@ -99,7 +107,15 @@ jobs:
 
       - run: npm run test:native:ios
 
+      # The sample script applies a version-checked workaround for Expo's
+      # host macro dependency, then builds the whole app through SwiftPM.
+      - name: Build with SwiftPM
+        if: matrix.integration == 'swiftpm'
+        working-directory: example
+        run: npm run build:ios:spm
+
       - name: Build
+        if: matrix.integration == 'cocoapods'
         working-directory: example/ios
         run: |
           xcodebuild -version

@@ -1,5 +1,7 @@
 # Manual QA checklist
 
+Latest SwiftPM runtime smoke test: [2026-11-18 report](qa/swiftpm-smoke-2026-11-18/README.md).
+
 Run on both iOS Simulator and Android Emulator.
 Use the test App ID / ad unit IDs (never a production ID).
 

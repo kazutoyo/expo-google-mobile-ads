@@ -31,6 +31,9 @@ Android uses the [GMA Next-Gen SDK](https://developers.google.com/admob/android/
 
 Server-side verification for rewarded ads is not supported yet.
 
+iOS includes a manifest for Expo's experimental Swift Package Manager integration,
+alongside CocoaPods. See the [SwiftPM setup and Expo macro workaround](https://kazutoyo.github.io/expo-google-mobile-ads/installation#swift-package-manager-ios).
+
 ## Installation
 
 ```sh

@@ -7,6 +7,12 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+
+- Add an iOS Swift Package Manager manifest for Expo SDK 58 autolinking, including
+  Google Mobile Ads and UMP dependencies, an example build workaround, and CI for
+  both CocoaPods and SwiftPM.
+
 ## [1.0.0] - 2026-11-18
 
 ### Added

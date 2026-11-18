@@ -12,6 +12,7 @@
     "android",
     "app.plugin.js",
     "expo-module.config.json",
+    "Package.swift",
     "CHANGELOG.md",
     "README.md",
     "README.ja.md",

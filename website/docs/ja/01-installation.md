@@ -9,6 +9,40 @@ npx expo install @kazutoyo/expo-google-mobile-ads
 
 ネイティブコードを含むため、**Expo Go では動きません**。development build が必要です。ローカルでは `npx expo run:ios` / `npx expo run:android`、EAS では `eas build --profile development` でビルドします。Expo Go のプロジェクトに入れると `requireNativeModule` が「モジュールが見つからない」というエラーを出しますが、これはライブラリの不具合ではありません。
 
+## Swift Package Manager (iOS)
+
+npm パッケージには、Expo SDK 58 の SwiftPM 連携（現在プレビュー）用の
+`Package.swift` が含まれています。この連携を導入済みのアプリでは、Expo の
+autolinking が `ExpoGoogleMobileAds` をソースからビルドし、Google 公式の
+Swift パッケージから Google Mobile Ads SDK `13.12.0..<14.0.0` と
+UMP `3.0.0..<4.0.0` を解決します。マニフェストには Swift 6.2 以降が必要です。
+Xcode は利用する Expo SDK が対応しているバージョンを使ってください。
+
+Xcode 27.2、Expo 58.0.26、expo-modules-macros 0.33.0 で、サンプルアプリ全体の
+SwiftPM Debug ビルドを arm64／x86_64 の iOS Simulator 向けに確認しています。
+この組み合わせでは回避策が必要です。サンプルはホスト用マクロを iOS の依存として
+ビルドする代わりに Expo 同梱のマクロ実行ファイルを使い、移行後に残る CocoaPods 専用の
+Expo 設定を除去します。[サンプルのビルド手順](https://github.com/kazutoyo/expo-google-mobile-ads/blob/main/example/README.md)を参照してください。
+ライブラリが利用先の Expo を自動で書き換えることはありません。回避策を使わない場合、
+この Expo バージョンでは `ExpoModulesMacrosCore` の SwiftSyntax 読み込みで失敗します。
+CocoaPods も引き続き使えます。
+
+npm パッケージをインストールしたあと、アプリのルートで SwiftPM の依存関係を更新します。
+
+```sh
+node node_modules/react-native/scripts/setup-apple-spm.js update
+```
+
+下の config plugin も設定してください。CocoaPods と SwiftPM のどちらでも
+AdMob App ID と計測設定の書き込みに必要です。依存関係の更新後はネイティブアプリを
+ビルドし直します。`Package.swift` は Expo が autolinking 時に生成する
+`ExpoModulesCoreHeaders` に依存するため、Xcode の Add Package Dependencies から
+このリポジトリを直接追加するのではなく、Expo 経由で使います。
+
+メディエーション用の `iosPods` オプションは CocoaPods 専用です。SwiftPM のアプリでは、
+各広告ネットワークの SwiftPM の手順に従ってアダプターを追加してください。
+従来の podspec による CocoaPods でのインストールも利用できます。
+
 ## config plugin の設定
 
 `app.json`（または `app.config.js`）の `plugins` に、AdMob の App ID を渡します。
