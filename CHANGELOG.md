@@ -1,18 +1,5 @@
 # Changelog
 
-## Unreleased
-
-- Use earnedReward as the sample grant path, document late mediation callbacks, and label no-reward dismissal explicitly.
-
-- Add rewarded interstitial ads on iOS and Android, with preloading, React hooks, examples and documentation.
-
-- Add native ads on iOS and Android, with preloading, React hooks, examples and documentation.
-
-- Count device sleep in app-open expiry and notify hooks when an expired ad resumes.
-
-- Add app open ads on iOS and Android, with preloading, React hooks, examples and documentation.
-
-
 All notable changes to this project are documented here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
@@ -20,11 +7,26 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-18
+
 ### Added
 
+- App open ads, rewarded interstitial ads, and native ads on iOS and Android,
+  with preloading, React hooks, examples, and documentation.
 - Swipeable interstitial ads on iOS and Android: `createSwipeableInterstitialAd`,
   `SwipeableInterstitialAdView`, and the owning/state hooks, with screen hold duration
   and ad lifecycle events. The app controls placement, gestures and dismissal.
+
+### Fixed
+
+- Count device sleep in app-open expiry and notify hooks when an expired ad resumes.
+- Use `earnedReward` as the sample grant path, document late mediation callbacks,
+  and label no-reward dismissal explicitly.
+
+### Changed
+
+- First stable release. Requires Expo SDK 58 (`expo` 58.0.21 or later); includes
+  the Expo Modules API 2.0 and Google Mobile Ads SDK updates documented in 0.2.0.
 
 ## [0.2.0] - 2026-11-11
 
