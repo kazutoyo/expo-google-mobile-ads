@@ -157,6 +157,12 @@ public final class ExpoGoogleMobileAdsObjectsModule: Module {
     View(NativeAdCardView.self) {
       ViewName("NativeAdView")
       Prop("ad") { (view: NativeAdCardView, ad: NativeAdObject?) in view.setAd(ad) }
+      Prop("layout") { (view: NativeAdCardView, layout: String?) in
+        view.setLayout(layout.flatMap(NativeAdLayout.init(rawValue:)) ?? .card)
+      }
+      Prop("bottomInset") { (view: NativeAdCardView, bottomInset: Double?) in
+        view.setBottomInset(bottomInset ?? 0)
+      }
     }
 
     View(BannerAdView.self) {

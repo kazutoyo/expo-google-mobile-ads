@@ -160,6 +160,10 @@ class ExpoGoogleMobileAdsObjectsModule : Module() {
     View(NativeAdCardView::class) {
       Name("NativeAdView")
       Prop("ad") { view: NativeAdCardView, ad: NativeAd? -> view.setAd(ad) }
+      Prop("layout") { view: NativeAdCardView, layout: String? ->
+        view.setLayout(NativeAdLayout.entries.find { it.value == layout } ?: NativeAdLayout.CARD)
+      }
+      Prop("bottomInset") { view: NativeAdCardView, bottomInset: Double? -> view.setBottomInset(bottomInset ?: 0.0) }
       OnViewDestroys { view: NativeAdCardView -> view.onDestroy() }
     }
 

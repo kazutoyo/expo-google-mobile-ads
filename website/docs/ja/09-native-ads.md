@@ -26,6 +26,12 @@ function SponsoredCard() {
 
 初期 API は組み込みカードレイアウトです。任意の React children やアセット配置のカスタマイズには対応していません。`style` でサイズを指定できます（既定の高さは360）。テキストとメディアが収まり、メディア部分が120ポイント/dp以上になる高さを確保してください。
 
+ページ全体に広告を出すときは `layout="fullScreen"` を指定します。メディアをビュー全体に敷き、下端にアイコン・見出し・本文・CTA を並べたカードを置きます。ビューの上に重ねるアプリの UI（「次へ」の帯など）のために下端を空けるときは、`bottomInset` にポイント/dp で指定します。カードはその8ポイント/dp上に置きます。
+
+```tsx
+<NativeAdView ad={ad} layout="fullScreen" bottomInset={80} style={{ flex: 1 }} />
+```
+
 `ad.assets` と `useNativeAdState(ad).assets` から headline、body、callToAction、advertiser、starRating、store、price、mediaAspectRatio を取得できます。クリック可能なアセットの描画には `NativeAdView` を使います。
 
 同じ広告を複数のカードに渡すと、新しいカードへ表示を移し、古いカードをクリアします。アンマウントでは広告を解放しません。`load()` は現在の広告を置き換え、ロード中はカードを空にします。

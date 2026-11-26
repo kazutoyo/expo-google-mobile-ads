@@ -6,10 +6,21 @@ import type { NativeAd } from './NativeAd';
 import { useNativeAdState } from './hooks/useNativeAd';
 
 const NativeView = requireNativeViewManager('ExpoGoogleMobileAdsObjects', 'NativeAdView');
-export type NativeAdViewProps = { ad: NativeAd; style?: StyleProp<ViewStyle> };
+export type NativeAdViewLayout = 'card' | 'fullScreen';
+export type NativeAdViewProps = {
+  ad: NativeAd;
+  /**
+   * `card` (default): a card with attribution, SDK media, headline, icon, body, advertiser and CTA.
+   * `fullScreen`: SDK media fills the view, with an install card (icon, headline, body, CTA) at the bottom.
+   */
+  layout?: NativeAdViewLayout;
+  /** `fullScreen` only: points/dp at the bottom kept clear for app UI drawn over the view. */
+  bottomInset?: number;
+  style?: StyleProp<ViewStyle>;
+};
 
-/** A native card with attribution, SDK media, headline, icon, body, advertiser and CTA. */
-export function NativeAdView({ ad, style }: NativeAdViewProps) {
+/** A native ad rendered with a built-in layout. */
+export function NativeAdView({ ad, layout = 'card', bottomInset = 0, style }: NativeAdViewProps) {
   useNativeAdState(ad);
   const released = isFullScreenAdReleased(ad);
   // Pass an ID so React Native DEV prop freezing cannot freeze the SharedObject.
@@ -18,6 +29,8 @@ export function NativeAdView({ ad, style }: NativeAdViewProps) {
   return (
     <NativeView
       ad={typeof id === 'number' && id > 0 ? id : null}
+      layout={layout}
+      bottomInset={bottomInset}
       style={[{ height: 360 }, style]}
     />
   );

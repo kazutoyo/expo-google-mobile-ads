@@ -83,3 +83,11 @@ it('passes null when Expo provides no registry ID', async () => {
   await render(<NativeAdView ad={makeAd({ __expo_shared_object_id__: undefined })} />);
   expect(mockNativeView.mock.calls[0][0].ad).toBeNull();
 });
+it('defaults to the card layout with no bottom inset', async () => {
+  await render(<NativeAdView ad={makeAd()} />);
+  expect(mockNativeView.mock.calls[0][0]).toMatchObject({ layout: 'card', bottomInset: 0 });
+});
+it('passes the full-screen layout and bottom inset to the native view', async () => {
+  await render(<NativeAdView ad={makeAd()} layout="fullScreen" bottomInset={80} />);
+  expect(mockNativeView.mock.calls[0][0]).toMatchObject({ layout: 'fullScreen', bottomInset: 80 });
+});
